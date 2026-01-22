@@ -127,6 +127,16 @@ impl GitRepo {
         }
     }
 
+    /// Get the current HEAD git hash (full 40-character SHA-1)
+    #[allow(dead_code)]
+    pub fn get_current_head_hash(&self) -> Result<String> {
+        let head = self.repo.head()?;
+        let oid = head
+            .target()
+            .ok_or_else(|| anyhow::anyhow!("HEAD is detached or invalid"))?;
+        Ok(oid.to_string())
+    }
+
     pub fn create_tag(&self, tag_name: &str) -> Result<()> {
         let head = self.repo.head()?.peel_to_commit()?;
         self.repo

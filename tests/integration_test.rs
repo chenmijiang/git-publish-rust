@@ -379,4 +379,98 @@ mod git_operations_tests {
             "Commit message should match"
         );
     }
+
+    #[test]
+    fn test_get_current_head_hash() {
+        let temp_dir = setup_test_repo();
+        let original_dir = env::current_dir().unwrap();
+
+        env::set_current_dir(temp_dir.path()).expect("Could not change to temp dir");
+
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Could not create GitRepo");
+
+        // Get HEAD hash value
+        let head_hash = git_repo
+            .get_current_head_hash()
+            .expect("Should get HEAD hash");
+
+        // Verify hash is 40 characters long (complete SHA-1)
+        assert_eq!(
+            head_hash.len(),
+            40,
+            "HEAD hash should be 40 characters (full SHA-1)"
+        );
+
+        // Verify hash contains only hexadecimal characters
+        assert!(
+            head_hash.chars().all(|c| c.is_ascii_hexdigit()),
+            "HEAD hash should contain only hex characters"
+        );
+
+        env::set_current_dir(original_dir).unwrap();
+    }
+
+    #[test]
+    fn test_get_current_head_hash_multiple_commits() {
+        // Verify that HEAD hash is correctly fetched after multiple commits
+        let temp_dir = TempDir::new().expect("Could not create temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("Could not init git repo");
+
+        {
+            let mut config = repo.config().expect("Could not get config");
+            config
+                .set_str("user.name", "Test User")
+                .expect("Could not set user.name");
+            config
+                .set_str("user.email", "test@example.com")
+                .expect("Could not set user.email");
+        }
+
+        let content_path = temp_dir.path().join("file.txt");
+
+        // Create first commit
+        fs::write(&content_path, "content1").expect("Could not write file");
+        let mut index = repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("file.txt"))
+            .expect("Could not add file");
+        index.write().expect("Could not write index");
+
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = repo.find_tree(tree_id).expect("Could not find tree");
+
+        let sig = repo.signature().expect("Could not get sig");
+        repo.commit(Some("HEAD"), &sig, &sig, "first commit", &tree, &[])
+            .expect("Could not create first commit");
+
+        // Create second commit
+        fs::write(&content_path, "content2").expect("Could not write file");
+        let mut index = repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("file.txt"))
+            .expect("Could not add file");
+        index.write().expect("Could not write index");
+
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = repo.find_tree(tree_id).expect("Could not find tree");
+        let parent = repo
+            .find_commit(repo.head().unwrap().target().unwrap())
+            .expect("Could not find parent");
+
+        repo.commit(Some("HEAD"), &sig, &sig, "second commit", &tree, &[&parent])
+            .expect("Could not create second commit");
+
+        // Now test
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).expect("Could not change to temp dir");
+
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Could not create GitRepo");
+        let head_hash = git_repo
+            .get_current_head_hash()
+            .expect("Should get HEAD hash");
+
+        assert_eq!(head_hash.len(), 40, "HEAD hash should be 40 characters");
+
+        env::set_current_dir(original_dir).unwrap();
+    }
 }
