@@ -5,7 +5,7 @@ use std::path::Path;
 
 /// Represents the complete configuration for git-publish.
 ///
-/// Contains branch mappings, conventional commit settings, and version formatting patterns.
+/// Contains branch mappings, conventional commit settings, version formatting patterns, and behavior options.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     #[serde(default)]
@@ -16,6 +16,9 @@ pub struct Config {
 
     #[serde(default)]
     pub patterns: PatternsConfig,
+
+    #[serde(default)]
+    pub behavior: BehaviorConfig,
 }
 
 /// Returns the default list of conventional commit types.
@@ -112,6 +115,15 @@ impl Default for PatternsConfig {
     }
 }
 
+/// Configuration for behavior customization.
+///
+/// Controls runtime behavior of git-publish without affecting version analysis.
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Default)]
+pub struct BehaviorConfig {
+    #[serde(default)]
+    pub skip_remote_selection: bool,
+}
+
 impl Default for Config {
     fn default() -> Self {
         let mut branches = HashMap::new();
@@ -123,6 +135,7 @@ impl Default for Config {
             branches,
             conventional_commits: ConventionalCommitsConfig::default(),
             patterns: PatternsConfig::default(),
+            behavior: BehaviorConfig::default(),
         }
     }
 }

@@ -1,0 +1,5 @@
+[branches]
+main = "v{version}"
+
+[behavior]
+skip_remote_selection = true

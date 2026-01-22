@@ -66,3 +66,16 @@ fn test_default_values() {
         .minor_keywords
         .contains(&"feature".to_string()));
 }
+
+#[test]
+fn test_behavior_config_defaults() {
+    let config = Config::default();
+    assert_eq!(config.behavior.skip_remote_selection, false);
+}
+
+#[test]
+fn test_behavior_config_skip_remote_selection_from_file() {
+    let config = load_config(Some("tests/fixtures/config_with_behavior.toml"))
+        .expect("Failed to load test config");
+    assert_eq!(config.behavior.skip_remote_selection, true);
+}
