@@ -1,6 +1,8 @@
 use anyhow::Result;
 use std::io::{self, Write};
 
+use crate::boundary::BoundaryWarning;
+
 pub fn display_error(message: &str) {
     eprintln!("\x1b[31mERROR:\x1b[0m {}", message); // Red color
 }
@@ -88,4 +90,90 @@ pub fn display_available_branches(branches: &[String]) {
     for branch in branches {
         println!("  - {}", branch);
     }
+}
+
+/// Validates that a tag matches the configured pattern.
+///
+/// # Arguments
+/// * `tag` - The tag to validate (e.g., "v1.2.3")
+/// * `pattern` - The pattern template (e.g., "v{version}" or "release-v{version}-final")
+///
+/// # Returns
+/// * `Ok(())` if the tag matches the pattern or pattern has no {version} constraint
+/// * `Err(anyhow::Error)` if the tag doesn't match the pattern
+///
+/// # Examples
+///
+/// ```ignore
+/// // Simple pattern with version
+/// validate_tag_format("v1.2.3", "v{version}") // Ok
+/// validate_tag_format("1.2.3", "v{version}")   // Err - missing prefix
+///
+/// // Pattern with suffix
+/// validate_tag_format("v1.2.3-release", "v{version}-release") // Ok
+/// validate_tag_format("v1.2.3", "v{version}-release")         // Err - missing suffix
+///
+/// // Pattern without {version} constraint
+/// validate_tag_format("anything", "free-form") // Ok
+/// ```
+#[allow(dead_code)]
+pub fn validate_tag_format(tag: &str, pattern: &str) -> Result<()> {
+    // If pattern doesn't contain {version}, no validation needed
+    if !pattern.contains("{version}") {
+        return Ok(());
+    }
+
+    // Extract prefix and suffix from pattern around {version}
+    let parts: Vec<&str> = pattern.split("{version}").collect();
+    if parts.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "Invalid pattern '{}': should have exactly one {{version}} placeholder",
+            pattern
+        ));
+    }
+
+    let prefix = parts[0];
+    let suffix = parts[1];
+
+    // Check if tag starts with prefix
+    if !tag.starts_with(prefix) {
+        return Err(anyhow::anyhow!(
+            "Tag '{}' does not match pattern '{}': missing prefix '{}'",
+            tag,
+            pattern,
+            prefix
+        ));
+    }
+
+    // Check if tag ends with suffix
+    if !tag.ends_with(suffix) {
+        return Err(anyhow::anyhow!(
+            "Tag '{}' does not match pattern '{}': missing suffix '{}'",
+            tag,
+            pattern,
+            suffix
+        ));
+    }
+
+    // Extract version part
+    let version_part = &tag[prefix.len()..tag.len() - suffix.len()];
+
+    // Validate it looks like a version (basic check: contains only digits and dots)
+    if !version_part.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        return Err(anyhow::anyhow!(
+            "Tag '{}' has invalid version format '{}'",
+            tag,
+            version_part
+        ));
+    }
+
+    Ok(())
+}
+
+/// Display a boundary warning to the user.
+///
+/// # Arguments
+/// * `warning` - The boundary warning to display
+pub fn display_boundary_warning(warning: &BoundaryWarning) {
+    eprintln!("\x1b[33m⚠ WARNING:\x1b[0m {}", warning);
 }

@@ -1,6 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
 
+use boundary::BoundaryWarning;
+
+mod boundary;
 mod config;
 mod conventional;
 mod git_ops;
@@ -93,11 +96,32 @@ fn main() -> Result<()> {
             ui::display_success("Successfully fetched latest data from remote");
         }
         Err(e) => {
-            // Fetch failures are not fatal - proceed with local data
-            ui::display_status(&format!(
-                "Warning: Could not fetch from remote: {}. Using local branch data.",
-                e
-            ));
+            // Check if it's an authentication error
+            let error_msg = e.to_string();
+            if error_msg.contains("auth")
+                || error_msg.contains("Auth")
+                || error_msg.contains("permission")
+                || error_msg.contains("Permission")
+            {
+                let warning = BoundaryWarning::FetchAuthenticationFailed {
+                    remote: "origin".to_string(),
+                };
+                ui::display_boundary_warning(&warning);
+
+                if !args.force
+                    && !args.dry_run
+                    && !ui::confirm_action("Continue using local data?")?
+                {
+                    println!("Operation cancelled by user.");
+                    return Ok(());
+                }
+            } else {
+                // Non-auth errors are still warnings
+                ui::display_status(&format!(
+                    "Warning: Could not fetch from remote: {}. Using local branch data.",
+                    e
+                ));
+            }
         }
     }
 
@@ -132,7 +156,14 @@ fn main() -> Result<()> {
         .collect();
 
     if commits.is_empty() {
-        ui::display_status("No new commits found since the last tag.");
+        let head_hash = git_repo.get_current_head_hash()?;
+        let warning = BoundaryWarning::NoNewCommits {
+            latest_tag: latest_tag.clone().unwrap_or_else(|| "unknown".to_string()),
+            current_commit_hash: head_hash,
+        };
+
+        ui::display_boundary_warning(&warning);
+
         if !args.force && !args.dry_run && !ui::confirm_action("Continue with no new commits?")? {
             println!("Operation cancelled by user.");
             return Ok(());
@@ -152,7 +183,21 @@ fn main() -> Result<()> {
             if let Some(current_version) = version::parse_version_from_tag(tag) {
                 version::bump_version(current_version, &version_bump)
             } else {
-                // If we can't parse the current tag, start with 0.1.0
+                // Unable to parse tag - display warning
+                let warning = BoundaryWarning::UnparsableTag {
+                    tag: tag.clone(),
+                    reason: "Version number format not recognized".to_string(),
+                };
+                ui::display_boundary_warning(&warning);
+
+                if !args.force
+                    && !args.dry_run
+                    && !ui::confirm_action("Use initial version v0.1.0 and continue?")?
+                {
+                    println!("Operation cancelled by user.");
+                    return Ok(());
+                }
+
                 version::Version::new(0, 1, 0)
             }
         }

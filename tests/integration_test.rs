@@ -474,3 +474,62 @@ mod git_operations_tests {
         env::set_current_dir(original_dir).unwrap();
     }
 }
+
+#[cfg(test)]
+mod ui_boundary_tests {
+    use git_publish::boundary::BoundaryWarning;
+
+    #[test]
+    fn test_boundary_warning_no_new_commits_display() {
+        // Verify that NoNewCommits warning displays correctly
+        let warning = BoundaryWarning::NoNewCommits {
+            latest_tag: "v1.0.0".to_string(),
+            current_commit_hash: "abc123def456789abc123def456789abc123def4".to_string(),
+        };
+
+        let display_str = format!("{}", warning);
+        assert!(display_str.contains("No new commits since tag"));
+        assert!(display_str.contains("v1.0.0"));
+        assert!(display_str.contains("abc123d")); // Should show short hash
+    }
+
+    #[test]
+    fn test_boundary_warning_unparsable_tag_display() {
+        // Verify that UnparsableTag warning displays correctly
+        let warning = BoundaryWarning::UnparsableTag {
+            tag: "invalid-tag".to_string(),
+            reason: "Version number format not recognized".to_string(),
+        };
+
+        let display_str = format!("{}", warning);
+        assert!(display_str.contains("Cannot parse tag"));
+        assert!(display_str.contains("invalid-tag"));
+        assert!(display_str.contains("Version number format"));
+    }
+
+    #[test]
+    fn test_boundary_warning_fetch_auth_failed_display() {
+        // Verify that FetchAuthenticationFailed warning displays correctly
+        let warning = BoundaryWarning::FetchAuthenticationFailed {
+            remote: "origin".to_string(),
+        };
+
+        let display_str = format!("{}", warning);
+        assert!(display_str.contains("Authentication failed"));
+        assert!(display_str.contains("origin"));
+    }
+
+    #[test]
+    fn test_ui_display_boundary_warning_exists() {
+        // Verify that display_boundary_warning function exists and is callable
+        use git_publish::ui::display_boundary_warning;
+
+        let warning = BoundaryWarning::NoNewCommits {
+            latest_tag: "v1.0.0".to_string(),
+            current_commit_hash: "abc123def456789abc123def456789abc123def4".to_string(),
+        };
+
+        // Just verify the function exists and can be called without panicking
+        display_boundary_warning(&warning);
+    }
+}
