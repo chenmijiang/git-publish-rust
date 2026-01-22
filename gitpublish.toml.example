@@ -48,3 +48,9 @@ minor_keywords = [
     "enhancement",
     "implement"
 ]
+
+[behavior]
+# Optional: Configure interactive prompt behavior
+# When true, automatically selects the single remote without prompting
+# (only applies when repository has exactly one remote)
+skip_remote_selection = false
