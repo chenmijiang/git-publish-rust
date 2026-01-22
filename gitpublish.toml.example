@@ -1,0 +1,50 @@
+# Git Publish Configuration
+# Define branch-to-tag-pattern mappings and conventional commit settings
+
+[branches]
+# Map branch names to tag patterns
+# Use {version} placeholder where the semantic version will be inserted
+main = "v{version}"
+develop = "d{version}"
+gray = "g{version}"
+feature = "f{version}"
+
+# Optional: Additional branches with custom patterns
+release = "release-{version}"
+hotfix = "hotfix/{version}"
+
+[conventional_commits]
+# Types of commits that follow conventional commit format
+types = [
+    "feat",      # Features (trigger minor version bump)
+    "fix",       # Bug fixes (trigger patch version bump)
+    "docs",      # Documentation changes
+    "style",     # Code style changes
+    "refactor",  # Code refactoring
+    "test",      # Test changes
+    "chore",     # Other changes
+    "build",     # Build system changes
+    "ci",        # CI configuration changes
+    "perf"       # Performance improvements
+]
+
+# Indicators of breaking changes (trigger major version bump)
+breaking_change_indicators = [
+    "BREAKING CHANGE:",
+    "BREAKING-CHANGE:"
+]
+
+# Keywords that indicate a major version bump
+major_keywords = [
+    "breaking",
+    "deprecate",
+    "remove"
+]
+
+# Keywords that indicate a minor version bump
+minor_keywords = [
+    "feature",
+    "feat",
+    "enhancement",
+    "implement"
+]
