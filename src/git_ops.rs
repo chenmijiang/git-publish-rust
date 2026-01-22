@@ -30,7 +30,6 @@ impl GitRepo {
     ///
     /// Updates local references to match the remote state. Supports SSH authentication
     /// via SSH agent, SSH keys from ~/.ssh/, or other credential helpers.
-    /// Also attempts to fast-forward the current branch if it has an upstream.
     ///
     /// # Arguments
     /// * `remote_name` - Name of the remote (e.g., "origin")
@@ -97,73 +96,6 @@ impl GitRepo {
         remote
             .fetch(refspecs, Some(&mut fetch_options), None)
             .map_err(|e| anyhow::anyhow!("Failed to fetch from remote '{}': {}", remote_name, e))?;
-
-        // After fetch, try to fast-forward the current branch if possible
-        let _ = self.try_fast_forward_current_branch();
-
-        Ok(())
-    }
-
-    /// Attempts to fast-forward the current branch with its upstream branch.
-    ///
-    /// This is called automatically after fetch. It safely updates the current branch
-    /// if it can be fast-forwarded without losing any commits.
-    ///
-    /// # Returns
-    /// * `Ok(())` - Successfully fast-forwarded or no fast-forward needed
-    /// * `Err` - If the operation fails, but this is not critical
-    fn try_fast_forward_current_branch(&self) -> Result<()> {
-        // Get the current HEAD
-        let head = self.repo.head()?;
-        let current_branch_name = head
-            .shorthand()
-            .ok_or_else(|| anyhow::anyhow!("Cannot determine current branch name"))?
-            .to_string();
-
-        // Get the current OID
-        let current_oid = head
-            .target()
-            .ok_or_else(|| anyhow::anyhow!("Current HEAD is invalid"))?;
-
-        // Try to find the upstream branch
-        let branch = self
-            .repo
-            .find_branch(&current_branch_name, BranchType::Local)?;
-        let upstream = branch.upstream()?;
-        let upstream_name = upstream
-            .name()?
-            .ok_or_else(|| anyhow::anyhow!("Upstream branch has no name"))?
-            .to_string();
-
-        // Get the upstream OID
-        let upstream_ref = self.repo.find_reference(&upstream_name)?;
-        let upstream_oid = upstream_ref
-            .target()
-            .ok_or_else(|| anyhow::anyhow!("Upstream OID is invalid"))?;
-
-        // If they're the same, nothing to do
-        if current_oid == upstream_oid {
-            return Ok(());
-        }
-
-        // Check if we can fast-forward: upstream must be reachable from current
-        let can_fast_forward = self.repo.graph_descendant_of(upstream_oid, current_oid)?;
-
-        if !can_fast_forward {
-            // Cannot fast-forward, branches have diverged
-            return Ok(());
-        }
-
-        // Perform the fast-forward
-        let upstream_commit = self.repo.find_commit(upstream_oid)?;
-
-        // Reset index and working directory
-        self.repo
-            .reset(upstream_commit.as_object(), git2::ResetType::Hard, None)?;
-
-        // Update the branch reference
-        self.repo
-            .set_head(&format!("refs/heads/{}", current_branch_name))?;
 
         Ok(())
     }
