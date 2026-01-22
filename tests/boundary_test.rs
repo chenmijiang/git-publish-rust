@@ -190,3 +190,42 @@ fn test_validate_tag_format_complex_suffix() {
         result
     );
 }
+
+// ============================================================================
+// UI Interaction Tests
+// ============================================================================
+
+#[cfg(test)]
+mod ui_interaction_tests {
+    use git_publish::ui;
+
+    #[test]
+    fn test_validate_tag_format_patterns() {
+        // Test various pattern matches
+        assert!(ui::validate_tag_format("v1.0.0", "v{version}").is_ok());
+        assert!(ui::validate_tag_format("release-v1.0.0", "release-v{version}").is_ok());
+        assert!(ui::validate_tag_format("app-v1.0.0-rc1", "app-v{version}-rc1").is_ok());
+    }
+
+    #[test]
+    fn test_validate_tag_format_invalid_patterns() {
+        // Test mismatched patterns
+        assert!(ui::validate_tag_format("1.0.0", "v{version}").is_err());
+        assert!(ui::validate_tag_format("v1.0.0", "release-v{version}").is_err());
+        assert!(ui::validate_tag_format("app-v1.0.0", "app-v{version}-rc1").is_err());
+    }
+
+    #[test]
+    fn test_validate_tag_format_no_version_placeholder() {
+        // Pattern without {version} placeholder should accept any tag
+        assert!(ui::validate_tag_format("anything-123", "free-form").is_ok());
+        assert!(ui::validate_tag_format("custom", "custom-tag-pattern").is_ok());
+    }
+
+    #[test]
+    fn test_validate_tag_format_empty_strings() {
+        // Test empty string handling
+        assert!(ui::validate_tag_format("", "v{version}").is_err());
+        assert!(ui::validate_tag_format("v1.0.0", "").is_ok()); // pattern empty means no constraint
+    }
+}

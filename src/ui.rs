@@ -177,3 +177,83 @@ pub fn validate_tag_format(tag: &str, pattern: &str) -> Result<()> {
 pub fn display_boundary_warning(warning: &BoundaryWarning) {
     eprintln!("\x1b[33m⚠ WARNING:\x1b[0m {}", warning);
 }
+
+/// Allows user to select or customize a tag.
+///
+/// Provides three options:
+/// 1. Press Enter to use the recommended tag
+/// 2. Enter a custom tag
+/// 3. Enter 'e' to edit the recommended value
+///
+/// # Arguments
+/// * `recommended_tag` - The default recommended tag
+/// * `_pattern` - The tag pattern for validation (e.g., "v{version}")
+///
+/// # Returns
+/// * `Ok(String)` - The selected or customized tag
+/// * `Err` - If user cancels or enters invalid input
+///
+/// # Examples
+/// ```ignore
+/// let tag = select_or_customize_tag("v1.2.3", "v{version}")?;
+/// // Returns "v1.2.3" (if user presses Enter)
+/// // or custom tag if user enters one
+/// ```
+pub fn select_or_customize_tag(recommended_tag: &str, _pattern: &str) -> Result<String> {
+    print!(
+        "\nTag options:\n  (press Enter to use recommended)\n  (enter custom tag)\n  (enter 'e' to edit)\n\nTag [{}]: ",
+        recommended_tag
+    );
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let input = input.trim();
+
+    match input {
+        "" => Ok(recommended_tag.to_string()),
+        "e" => {
+            print!("Edit tag [{}]: ", recommended_tag);
+            io::stdout().flush()?;
+
+            let mut edited = String::new();
+            io::stdin().read_line(&mut edited)?;
+            Ok(edited.trim().to_string())
+        }
+        custom => Ok(custom.to_string()),
+    }
+}
+
+/// Confirms tag use with format validation.
+///
+/// Validates that the tag matches the configured pattern, then asks for confirmation.
+///
+/// # Arguments
+/// * `tag` - The tag to validate and confirm
+/// * `pattern` - The tag pattern to validate against
+///
+/// # Returns
+/// * `Ok(true)` - If user confirms after successful validation
+/// * `Ok(false)` - If user declines
+/// * `Err` - If validation fails or input error occurs
+///
+/// # Examples
+/// ```ignore
+/// if confirm_tag_use("v1.2.3", "v{version}")? {
+///     // Proceed with tag
+/// }
+/// ```
+pub fn confirm_tag_use(tag: &str, pattern: &str) -> Result<bool> {
+    // First validate the tag format
+    validate_tag_format(tag, pattern)?;
+
+    // If validation passed, confirm with user
+    print!("\nConfirm tag creation: {} (y/N): ", tag);
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    let response = input.trim().to_lowercase();
+    Ok(response == "y" || response == "yes")
+}

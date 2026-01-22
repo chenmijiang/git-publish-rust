@@ -218,45 +218,50 @@ fn main() -> Result<()> {
     // Display the proposed tag
     ui::display_proposed_tag(latest_tag.as_deref(), &new_tag);
 
-    // Confirm with the user
-    if !args.force && !args.dry_run && !ui::confirm_action("Create and push this tag?")? {
+    // Get user's tag selection (use default, customize, or edit)
+    let final_tag = if !args.force && !args.dry_run {
+        ui::select_or_customize_tag(&new_tag, &new_tag_pattern)?
+    } else {
+        new_tag.clone()
+    };
+
+    // Confirm tag use (checks format and gets user confirmation)
+    if !args.force && !args.dry_run && !ui::confirm_tag_use(&final_tag, &new_tag_pattern)? {
         println!("Tag creation cancelled by user.");
         return Ok(());
     }
 
     if args.dry_run {
         ui::display_status("Dry run: Would create tag");
-        ui::display_success(&format!("Would create tag: {}", new_tag));
-        if !args.force {
-            ui::display_status("Dry run: Would push tag to remote");
-            ui::display_success(&format!("Would push tag: {} to remote", new_tag));
-        }
+        ui::display_success(&format!("Would create tag: {}", final_tag));
+        ui::display_status("Dry run: Would ask to push tag to remote");
+        ui::display_success(&format!("Would ask about pushing {} to remote", final_tag));
         return Ok(());
     }
 
     // Create the tag
-    ui::display_status(&format!("Creating tag: {}", new_tag));
-    if let Err(e) = git_repo.create_tag(&new_tag) {
-        ui::display_error(&format!("Failed to create tag '{}': {}", new_tag, e));
+    ui::display_status(&format!("Creating tag: {}", final_tag));
+    if let Err(e) = git_repo.create_tag(&final_tag) {
+        ui::display_error(&format!("Failed to create tag '{}': {}", final_tag, e));
         std::process::exit(1);
     }
-    ui::display_success(&format!("Created tag: {}", new_tag));
+    ui::display_success(&format!("Created tag: {}", final_tag));
 
     // Push the tag to remote
-    ui::display_status(&format!("Pushing tag: {} to remote", new_tag));
-    if let Err(e) = git_repo.push_tag(&new_tag) {
-        ui::display_error(&format!("Failed to push tag '{}': {}", new_tag, e));
+    ui::display_status(&format!("Pushing tag: {} to remote", final_tag));
+    if let Err(e) = git_repo.push_tag(&final_tag) {
+        ui::display_error(&format!("Failed to push tag '{}': {}", final_tag, e));
         if !args.force {
             // If not in force mode, let the user know they can retry
-            eprintln!("Tag was created locally but not pushed. You can try pushing manually with: git push origin {}", new_tag);
+            eprintln!("Tag was created locally but not pushed. You can try pushing manually with: git push origin {}", final_tag);
         }
         std::process::exit(1);
     }
-    ui::display_success(&format!("Pushed tag: {} to remote", new_tag));
+    ui::display_success(&format!("Pushed tag: {} to remote", final_tag));
 
     println!(
         "\nSuccessfully published tag {} for branch {}",
-        new_tag, branch_to_tag
+        final_tag, branch_to_tag
     );
 
     Ok(())
