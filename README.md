@@ -6,7 +6,8 @@ A Rust CLI tool for creating and pushing git tags based on configurable branch-t
 
 - Configurable branch-to-tag-pattern mappings via `gitpublish.toml`
 - Automatic semantic version bump detection based on conventional commits
-- Interactive branch selection
+- Interactive branch and remote selection
+- Multi-remote support with CLI override
 - Commit analysis and preview before tagging
 - Dry-run mode for testing
 - Confirmation prompts before creating and pushing tags
@@ -40,48 +41,49 @@ cargo build --release
 
 ## Configuration
 
-Create a `gitpublish.toml` file in your repository root or in your home directory (`~/.gitpublish.toml`). An example configuration is provided in `gitpublish.toml.example`.
-
-Example configuration:
+Create a `gitpublish.toml` file in your repository root or home directory (`~/.gitpublish.toml`). See `gitpublish.toml.example` for a complete example.
 
 ```toml
 [branches]
 main = "v{version}"
 develop = "d{version}"
-gray = "g{version}"
 
 [conventional_commits]
 types = ["feat", "fix", "docs", "style", "refactor", "test", "chore", "build", "ci", "perf"]
 breaking_change_indicators = ["BREAKING CHANGE:", "BREAKING-CHANGE:"]
 major_keywords = ["breaking", "deprecate"]
-minor_keywords = ["feature", "feat", "enhancement"]
+minor_keywords = ["feature", "feat"]
+
+[behavior]
+skip_remote_selection = false  # Auto-select single remote without prompting
 ```
+
+### Configuration Options
+
+**`[behavior] skip_remote_selection`** (boolean, default: `false`)  
+When `true` and the repository has only one remote, git-publish automatically selects it without prompting.
 
 ## Usage
 
 ```bash
-# Interactive mode - select branch to tag
+# Interactive mode
 git-publish
 
 # Specify branch directly
 git-publish --branch main
 
-# Dry run - preview what would happen
+# Specify remote directly
+git-publish --remote origin
+git-publish -r upstream
+
+# Dry run - preview without making changes
 git-publish --dry-run
 
 # Skip confirmation prompts
 git-publish --force
 
-# Use custom configuration file
-git-publish --config /path/to/config.toml
-
-# List configured branches
-git-publish --list
-
-# Show help
+# Show help / version
 git-publish --help
-
-# Show version
 git-publish --version
 ```
 
@@ -95,13 +97,15 @@ The tool analyzes commits using conventional commit format to determine version 
 
 ## Options
 
-- `-c, --config <FILE>`: Custom configuration file path
-- `-b, --branch <BRANCH>`: Explicitly specify branch to tag (bypasses selection)
-- `-f, --force`: Skip confirmation prompts
-- `-n, --dry-run`: Preview what would happen without making changes
-- `--list`: Show available configured branches and exit
-- `-h, --help`: Print help information
-- `-V, --version`: Print version information
+| Flag | Description |
+|------|-------------|
+| `-b, --branch <BRANCH>` | Explicitly specify branch to tag |
+| `-r, --remote <REMOTE>` | Specify which git remote to use |
+| `-f, --force` | Skip confirmation prompts |
+| `-n, --dry-run` | Preview without making changes |
+| `-c, --config <FILE>` | Custom configuration file path |
+| `-h, --help` | Show help information |
+| `-V, --version` | Show version information |
 
 ## Contributing
 
