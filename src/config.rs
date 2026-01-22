@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+/// Represents the complete configuration for git-publish.
+///
+/// Contains branch mappings, conventional commit settings, and version formatting patterns.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     #[serde(default)]
@@ -15,6 +18,7 @@ pub struct Config {
     pub patterns: PatternsConfig,
 }
 
+/// Returns the default list of conventional commit types.
 fn default_commit_types() -> Vec<String> {
     vec![
         "feat".to_string(),
@@ -30,6 +34,7 @@ fn default_commit_types() -> Vec<String> {
     ]
 }
 
+/// Returns the default list of breaking change indicators.
 fn default_breaking_change_indicators() -> Vec<String> {
     vec![
         "BREAKING CHANGE:".to_string(),
@@ -37,10 +42,12 @@ fn default_breaking_change_indicators() -> Vec<String> {
     ]
 }
 
+/// Returns the default list of keywords that trigger major version bumps.
 fn default_major_keywords() -> Vec<String> {
     vec!["breaking".to_string(), "deprecate".to_string()]
 }
 
+/// Returns the default list of keywords that trigger minor version bumps.
 fn default_minor_keywords() -> Vec<String> {
     vec![
         "feature".to_string(),
@@ -49,6 +56,10 @@ fn default_minor_keywords() -> Vec<String> {
     ]
 }
 
+/// Configuration for conventional commit analysis.
+///
+/// Defines the types, breaking change indicators, and keywords used to analyze commits
+/// and determine version bumping strategy.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct ConventionalCommitsConfig {
     #[serde(default = "default_commit_types")]
@@ -75,12 +86,16 @@ impl Default for ConventionalCommitsConfig {
     }
 }
 
+/// Configuration for version formatting patterns.
+///
+/// Allows customization of how versions are formatted for different bump types.
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct PatternsConfig {
     #[serde(default = "default_version_format")]
     pub version_format: HashMap<String, String>,
 }
 
+/// Returns the default version format patterns.
 fn default_version_format() -> HashMap<String, String> {
     let mut map = HashMap::new();
     map.insert("major".to_string(), "{major}.{minor}.{patch}".to_string());
@@ -112,6 +127,20 @@ impl Default for Config {
     }
 }
 
+/// Loads configuration from file or returns defaults.
+///
+/// Attempts to load configuration in the following order:
+/// 1. Custom path provided as parameter
+/// 2. `gitpublish.toml` in current directory
+/// 3. `~/.config/.gitpublish.toml` in user config directory
+/// 4. Default configuration if no file found
+///
+/// # Arguments
+/// * `config_path` - Optional path to custom configuration file
+///
+/// # Returns
+/// * `Ok(Config)` - Loaded or default configuration
+/// * `Err` - If file exists but cannot be read or parsed
 pub fn load_config(config_path: Option<&str>) -> Result<Config, Box<dyn std::error::Error>> {
     let config_str = if let Some(path) = config_path {
         fs::read_to_string(path)?

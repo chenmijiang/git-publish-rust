@@ -232,10 +232,13 @@ fn main() -> Result<()> {
     }
 
     if args.dry_run {
-        ui::display_status("Dry run模式:");
-        ui::display_success(&format!("  Step 1: 将创建本地tag: {}", final_tag));
-        ui::display_success("  Step 2: 将询问是否推送tag到远程");
-        ui::display_success(&format!("  Step 3: (可选) 推送 {} 到 origin", final_tag));
+        ui::display_status("Dry run mode:");
+        ui::display_success(&format!("  Step 1: Will create local tag: {}", final_tag));
+        ui::display_success("  Step 2: Will ask whether to push tag to remote");
+        ui::display_success(&format!(
+            "  Step 3: (Optional) Push {} to origin",
+            final_tag
+        ));
         return Ok(());
     }
 

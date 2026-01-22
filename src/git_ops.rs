@@ -1,11 +1,22 @@
 use anyhow::Result;
 use git2::{BranchType, Commit, Oid, Repository};
 
+/// Wrapper around git2 Repository for tag and commit operations.
+///
+/// Provides high-level abstractions for common git operations used by git-publish,
+/// including fetching, tagging, pushing, and commit history traversal.
 pub struct GitRepo {
     repo: Repository,
 }
 
 impl GitRepo {
+    /// Creates a new GitRepo instance for the current working directory.
+    ///
+    /// Discovers the git repository in the current directory or parent directories.
+    ///
+    /// # Returns
+    /// * `Ok(GitRepo)` - Successfully initialized repository wrapper
+    /// * `Err` - If not in a git repository
     pub fn new() -> Result<Self> {
         // Check if we're in a git repository
         let repo = match Repository::discover(".") {
@@ -15,7 +26,16 @@ impl GitRepo {
         Ok(GitRepo { repo })
     }
 
-    /// Fetch latest data from remote to ensure branch and tags are up-to-date
+    /// Fetches latest data from a remote repository.
+    ///
+    /// Updates local references to match the remote state.
+    ///
+    /// # Arguments
+    /// * `remote_name` - Name of the remote (e.g., "origin")
+    ///
+    /// # Returns
+    /// * `Ok(())` - Successfully fetched
+    /// * `Err` - If remote not found or fetch fails
     pub fn fetch_from_remote(&self, remote_name: &str) -> Result<()> {
         let mut remote = self
             .repo
@@ -30,12 +50,32 @@ impl GitRepo {
         Ok(())
     }
 
+    /// Gets the commit object ID (OID) of a branch head.
+    ///
+    /// # Arguments
+    /// * `branch_name` - Name of the branch
+    ///
+    /// # Returns
+    /// * `Ok(Oid)` - The commit OID at the branch head
+    /// * `Err` - If branch not found
     pub fn get_branch_head_oid(&self, branch_name: &str) -> Result<Oid> {
         let branch = self.repo.find_branch(branch_name, BranchType::Local)?;
         let commit = branch.into_reference().peel_to_commit()?;
         Ok(commit.id())
     }
 
+    /// Finds the latest tag on a specific branch.
+    ///
+    /// Walks the commit history from the branch head backwards to find the most recent tag.
+    /// Handles both lightweight and annotated tags.
+    ///
+    /// # Arguments
+    /// * `branch_name` - Name of the branch to search
+    ///
+    /// # Returns
+    /// * `Ok(Some(tag))` - The latest tag name found
+    /// * `Ok(None)` - If no tags exist on this branch
+    /// * `Err` - If branch lookup fails
     pub fn get_latest_tag_on_branch(&self, branch_name: &str) -> Result<Option<String>> {
         let branch_oid = self.get_branch_head_oid(branch_name)?;
 
@@ -72,6 +112,18 @@ impl GitRepo {
         Ok(None)
     }
 
+    /// Gets all commits on a branch since a specific tag.
+    ///
+    /// Walks the commit history from the branch head backwards, collecting all commits
+    /// until the tag commit is reached. Returns commits in chronological order (oldest first).
+    ///
+    /// # Arguments
+    /// * `branch_name` - Name of the branch
+    /// * `tag_name` - Optional tag to stop at; if None, returns all commits on branch
+    ///
+    /// # Returns
+    /// * `Ok(commits)` - Vector of commits since tag (chronological order)
+    /// * `Err` - If branch lookup fails
     pub fn get_commits_since_tag(
         &self,
         branch_name: &str,
@@ -137,6 +189,14 @@ impl GitRepo {
         Ok(oid.to_string())
     }
 
+    /// Creates a lightweight tag on the current HEAD commit.
+    ///
+    /// # Arguments
+    /// * `tag_name` - Name of the tag to create
+    ///
+    /// # Returns
+    /// * `Ok(())` - Tag created successfully
+    /// * `Err` - If tag creation fails
     pub fn create_tag(&self, tag_name: &str) -> Result<()> {
         let head = self.repo.head()?.peel_to_commit()?;
         self.repo
@@ -144,6 +204,16 @@ impl GitRepo {
         Ok(())
     }
 
+    /// Pushes a tag to the "origin" remote.
+    ///
+    /// Attempts to authenticate using SSH credentials from ~/.ssh/id_rsa.
+    ///
+    /// # Arguments
+    /// * `tag_name` - Name of the tag to push
+    ///
+    /// # Returns
+    /// * `Ok(())` - Tag pushed successfully
+    /// * `Err` - If push fails (network, auth, or reference error)
     pub fn push_tag(&self, tag_name: &str) -> Result<()> {
         let mut remote = match self.repo.find_remote("origin") {
             Ok(remote) => remote,

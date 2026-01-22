@@ -1,6 +1,9 @@
 use crate::config;
 pub use crate::version::VersionBump;
 
+/// Represents a parsed conventional commit message.
+///
+/// Contains extracted components from a commit message that follows the conventional commits specification.
 #[derive(Debug, PartialEq)]
 pub struct ParsedCommit {
     pub r#type: String,
@@ -9,6 +12,28 @@ pub struct ParsedCommit {
     pub is_breaking_change: bool,
 }
 
+/// Parses a commit message following the conventional commits specification.
+///
+/// Recognizes three conventional commit patterns:
+/// 1. `type(scope)!: description` or `type(scope): description` with optional breaking change marker
+/// 2. `type!: description` (breaking change without scope)
+/// 3. `type: description` (non-breaking)
+///
+/// Non-conventional commits default to type "chore".
+///
+/// # Arguments
+/// * `message` - The commit message to parse
+///
+/// # Returns
+/// * `Some(ParsedCommit)` - Successfully parsed commit
+/// * `None` - Never returns None; defaults to chore type
+///
+/// # Example
+/// ```ignore
+/// let parsed = parse_conventional_commit("feat(auth): add login").unwrap();
+/// assert_eq!(parsed.r#type, "feat");
+/// assert_eq!(parsed.scope, Some("auth".to_string()));
+/// ```
 pub fn parse_conventional_commit(message: &str) -> Option<ParsedCommit> {
     // Case 1: type(scope)!: description or type(scope): description
     if let Ok(re) = regex::Regex::new(r"^([a-z]+)\(([^)]+)\)(!?):\s*(.*)") {
@@ -90,6 +115,20 @@ pub fn parse_conventional_commit(message: &str) -> Option<ParsedCommit> {
     })
 }
 
+/// Determines the semantic version bump type based on conventional commits.
+///
+/// Analyzes commit messages to determine whether to bump major, minor, or patch version:
+/// - **Major**: If any breaking change is detected
+/// - **Minor**: If any feature commits are found
+/// - **Patch**: If only fixes or other non-feature commits are found
+/// - **Default**: Patch if no conventional commits are detected
+///
+/// # Arguments
+/// * `commit_messages` - List of commit messages to analyze
+/// * `config` - Configuration containing keywords for version bump detection
+///
+/// # Returns
+/// The appropriate `VersionBump` type based on commit analysis
 pub fn determine_version_bump(
     commit_messages: &[String],
     config: &config::ConventionalCommitsConfig,
