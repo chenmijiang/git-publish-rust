@@ -533,3 +533,99 @@ mod ui_boundary_tests {
         display_boundary_warning(&warning);
     }
 }
+
+#[cfg(test)]
+mod fetch_refspec_tests {
+    use super::*;
+    use git2::Repository;
+    use std::fs;
+    use std::path::Path;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_fetch_with_explicit_refspecs_when_on_target_branch() {
+        // This test reproduces the scenario where current branch is the target branch
+        // and verifies that fetch works correctly with explicit refspecs
+
+        // Create origin repo
+        let origin_dir = TempDir::new().expect("Could not create origin dir");
+        let origin_repo = Repository::init(origin_dir.path()).expect("Could not init origin");
+        {
+            let mut config = origin_repo.config().expect("Could not get config");
+            config
+                .set_str("user.name", "Test User")
+                .expect("Could not set user.name");
+            config
+                .set_str("user.email", "test@example.com")
+                .expect("Could not set user.email");
+        }
+
+        // Create initial commit in origin
+        let origin_file = origin_dir.path().join("test.txt");
+        fs::write(&origin_file, "original content").expect("Could not write file");
+        let mut index = origin_repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("test.txt"))
+            .expect("Could not add file");
+        index.write().expect("Could not write index");
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = origin_repo.find_tree(tree_id).expect("Could not find tree");
+        let sig = origin_repo.signature().expect("Could not get sig");
+        origin_repo
+            .commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .expect("Could not create commit");
+
+        // Create a tag on origin
+        let head_commit = origin_repo.head().unwrap().peel_to_commit().unwrap();
+        origin_repo
+            .tag_lightweight("v1.0.0", head_commit.as_object(), false)
+            .expect("Could not create tag");
+
+        // Clone from origin
+        let work_dir = TempDir::new().expect("Could not create work dir");
+        let work_repo = Repository::clone(origin_dir.path().to_str().unwrap(), work_dir.path())
+            .expect("Could not clone repo");
+
+        // Make a new commit in the work repo (while on master/main branch)
+        let work_file = work_dir.path().join("test.txt");
+        fs::write(&work_file, "modified content").expect("Could not write file");
+        let mut index = work_repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("test.txt"))
+            .expect("Could not add file");
+        index.write().expect("Could not write index");
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = work_repo.find_tree(tree_id).expect("Could not find tree");
+        let parent = work_repo
+            .head()
+            .expect("Could not get HEAD")
+            .peel_to_commit()
+            .expect("Could not peel to commit");
+        let sig = work_repo.signature().expect("Could not get sig");
+        work_repo
+            .commit(
+                Some("HEAD"),
+                &sig,
+                &sig,
+                "feat: new feature on master",
+                &tree,
+                &[&parent],
+            )
+            .expect("Could not create commit");
+
+        // Now test that GitRepo can fetch successfully even though current branch is master
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(work_dir.path()).expect("Could not change to work dir");
+
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Could not create GitRepo");
+
+        // This should succeed with the explicit refspecs
+        let fetch_result = git_repo.fetch_from_remote("origin");
+        assert!(
+            fetch_result.is_ok(),
+            "Fetch should succeed even when current branch is the target branch"
+        );
+
+        env::set_current_dir(original_dir).unwrap();
+    }
+}

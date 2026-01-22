@@ -28,7 +28,9 @@ impl GitRepo {
 
     /// Fetches latest data from a remote repository.
     ///
-    /// Updates local references to match the remote state.
+    /// Updates local references to match the remote state. Uses explicit refspecs
+    /// to fetch all branches and tags, which is more reliable than using empty refspecs
+    /// especially when the current branch matches the branch being tagged.
     ///
     /// # Arguments
     /// * `remote_name` - Name of the remote (e.g., "origin")
@@ -42,7 +44,17 @@ impl GitRepo {
             .find_remote(remote_name)
             .map_err(|_| anyhow::anyhow!("Remote '{}' not found", remote_name))?;
 
-        let refspecs: &[&str] = &[];
+        // Use explicit refspecs to fetch all branches and tags from the remote.
+        // This is more reliable than using empty refspecs, especially when:
+        // 1. The current branch is the branch being tagged
+        // 2. Authentication or network issues occur
+        // The refspecs mean:
+        // - "+refs/heads/*:refs/remotes/origin/*" - Fetch all remote branches
+        // - "+refs/tags/*:refs/tags/*" - Fetch all tags
+        let refspecs = &[
+            "+refs/heads/*:refs/remotes/origin/*",
+            "+refs/tags/*:refs/tags/*",
+        ];
         remote
             .fetch(refspecs, None, None)
             .map_err(|e| anyhow::anyhow!("Failed to fetch from remote '{}': {}", remote_name, e))?;
