@@ -620,7 +620,7 @@ mod fetch_refspec_tests {
         let git_repo = git_publish::git_ops::GitRepo::new().expect("Could not create GitRepo");
 
         // This should succeed with the explicit refspecs
-        let fetch_result = git_repo.fetch_from_remote("origin");
+        let fetch_result = git_repo.fetch_from_remote("origin", "master");
         assert!(
             fetch_result.is_ok(),
             "Fetch should succeed even when current branch is the target branch"

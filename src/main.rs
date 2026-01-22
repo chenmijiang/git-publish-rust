@@ -91,7 +91,7 @@ fn main() -> Result<()> {
 
     // Fetch latest from remote to ensure we have the latest tags and commits
     ui::display_status("Fetching latest data from remote...");
-    match git_repo.fetch_from_remote("origin") {
+    match git_repo.fetch_from_remote("origin", &branch_to_tag) {
         Ok(_) => {
             ui::display_success("Successfully fetched latest data from remote");
         }
