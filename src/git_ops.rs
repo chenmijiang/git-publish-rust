@@ -28,9 +28,8 @@ impl GitRepo {
 
     /// Fetches latest data from a remote repository.
     ///
-    /// Updates local references to match the remote state. Uses explicit refspecs
-    /// to fetch all branches and tags, which is more reliable than using empty refspecs
-    /// especially when the current branch matches the branch being tagged.
+    /// Updates local references to match the remote state. Supports SSH authentication
+    /// via SSH agent, SSH keys from ~/.ssh/, or other credential helpers.
     ///
     /// # Arguments
     /// * `remote_name` - Name of the remote (e.g., "origin")
@@ -44,10 +43,49 @@ impl GitRepo {
             .find_remote(remote_name)
             .map_err(|_| anyhow::anyhow!("Remote '{}' not found", remote_name))?;
 
+        let mut fetch_options = git2::FetchOptions::new();
+
+        // Set credentials callback for authentication
+        let mut callbacks = git2::RemoteCallbacks::new();
+        callbacks.credentials(|_url, username_from_url, allowed_types| {
+            // SSH key authentication
+            if allowed_types.contains(git2::CredentialType::SSH_KEY) {
+                // Try different key types in order of preference
+                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+                let key_paths = vec![
+                    format!("{}/.ssh/id_ed25519", home),
+                    format!("{}/.ssh/id_rsa", home),
+                    format!("{}/.ssh/id_ecdsa", home),
+                ];
+
+                for key_path in key_paths {
+                    let path = std::path::Path::new(&key_path);
+                    if path.exists() {
+                        if let Ok(cred) = git2::Cred::ssh_key(
+                            username_from_url.unwrap_or("git"),
+                            None,
+                            path,
+                            None,
+                        ) {
+                            return Ok(cred);
+                        }
+                    }
+                }
+
+                // Try SSH agent as fallback
+                if let Ok(cred) = git2::Cred::ssh_key_from_agent(username_from_url.unwrap_or("git"))
+                {
+                    return Ok(cred);
+                }
+            }
+
+            // Fall back to default credentials
+            git2::Cred::default()
+        });
+
+        fetch_options.remote_callbacks(callbacks);
+
         // Use explicit refspecs to fetch all branches and tags from the remote.
-        // This is more reliable than using empty refspecs, especially when:
-        // 1. The current branch is the branch being tagged
-        // 2. Authentication or network issues occur
         // The refspecs mean:
         // - "+refs/heads/*:refs/remotes/origin/*" - Fetch all remote branches
         // - "+refs/tags/*:refs/tags/*" - Fetch all tags
@@ -56,7 +94,7 @@ impl GitRepo {
             "+refs/tags/*:refs/tags/*",
         ];
         remote
-            .fetch(refspecs, None, None)
+            .fetch(refspecs, Some(&mut fetch_options), None)
             .map_err(|e| anyhow::anyhow!("Failed to fetch from remote '{}': {}", remote_name, e))?;
 
         Ok(())
