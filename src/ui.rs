@@ -257,3 +257,52 @@ pub fn confirm_tag_use(tag: &str, pattern: &str) -> Result<bool> {
     let response = input.trim().to_lowercase();
     Ok(response == "y" || response == "yes")
 }
+
+/// Confirms whether to push a locally created tag to a remote.
+///
+/// # Arguments
+/// * `tag` - The tag that was created locally
+/// * `remote` - The remote name (e.g., "origin")
+///
+/// # Returns
+/// * `Ok(true)` - If user confirms to push
+/// * `Ok(false)` - If user declines to push
+/// * `Err` - If input error occurs
+///
+/// # Examples
+/// ```ignore
+/// if confirm_push_tag("v1.2.3", "origin")? {
+///     // Push the tag
+/// }
+/// ```
+pub fn confirm_push_tag(tag: &str, remote: &str) -> Result<bool> {
+    print!(
+        "\nTag '{}' created locally. Push to remote '{}' (y/N): ",
+        tag, remote
+    );
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    let response = input.trim().to_lowercase();
+    Ok(response == "y" || response == "yes")
+}
+
+/// Displays instructions for manually pushing a tag to remote.
+///
+/// # Arguments
+/// * `tag` - The tag that was created locally
+/// * `remote` - The remote name (e.g., "origin")
+///
+/// # Examples
+/// ```ignore
+/// display_manual_push_instruction("v1.2.3", "origin");
+/// // Prints: To push manually, run: git push origin v1.2.3
+/// ```
+pub fn display_manual_push_instruction(tag: &str, remote: &str) {
+    println!(
+        "\n\x1b[33m→\x1b[0m To push this tag later, run:\n  \x1b[36mgit push {} {}\x1b[0m",
+        remote, tag
+    );
+}

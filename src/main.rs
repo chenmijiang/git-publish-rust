@@ -232,10 +232,10 @@ fn main() -> Result<()> {
     }
 
     if args.dry_run {
-        ui::display_status("Dry run: Would create tag");
-        ui::display_success(&format!("Would create tag: {}", final_tag));
-        ui::display_status("Dry run: Would ask to push tag to remote");
-        ui::display_success(&format!("Would ask about pushing {} to remote", final_tag));
+        ui::display_status("Dry run模式:");
+        ui::display_success(&format!("  Step 1: 将创建本地tag: {}", final_tag));
+        ui::display_success("  Step 2: 将询问是否推送tag到远程");
+        ui::display_success(&format!("  Step 3: (可选) 推送 {} 到 origin", final_tag));
         return Ok(());
     }
 
@@ -247,22 +247,35 @@ fn main() -> Result<()> {
     }
     ui::display_success(&format!("Created tag: {}", final_tag));
 
-    // Push the tag to remote
-    ui::display_status(&format!("Pushing tag: {} to remote", final_tag));
-    if let Err(e) = git_repo.push_tag(&final_tag) {
-        ui::display_error(&format!("Failed to push tag '{}': {}", final_tag, e));
-        if !args.force {
-            // If not in force mode, let the user know they can retry
-            eprintln!("Tag was created locally but not pushed. You can try pushing manually with: git push origin {}", final_tag);
-        }
-        std::process::exit(1);
-    }
-    ui::display_success(&format!("Pushed tag: {} to remote", final_tag));
+    // Step 2: Ask user whether to push the tag
+    let should_push = if !args.force {
+        ui::confirm_push_tag(&final_tag, "origin")?
+    } else {
+        true // In force mode, push automatically
+    };
 
-    println!(
-        "\nSuccessfully published tag {} for branch {}",
-        final_tag, branch_to_tag
-    );
+    // Step 3: Push if user confirmed (or in force mode)
+    if should_push {
+        ui::display_status(&format!("Pushing tag: {} to remote", final_tag));
+        if let Err(e) = git_repo.push_tag(&final_tag) {
+            ui::display_error(&format!("Failed to push tag '{}': {}", final_tag, e));
+            std::process::exit(1);
+        }
+        ui::display_success(&format!("Pushed tag: {} to remote", final_tag));
+
+        println!(
+            "\n\x1b[32m✓\x1b[0m Successfully published tag {} for branch {}\n",
+            final_tag, branch_to_tag
+        );
+    } else {
+        // Tag created locally, but not pushed
+        ui::display_manual_push_instruction(&final_tag, "origin");
+
+        println!(
+            "\n\x1b[32m✓\x1b[0m Tag {} created locally for branch {}\n",
+            final_tag, branch_to_tag
+        );
+    }
 
     Ok(())
 }
