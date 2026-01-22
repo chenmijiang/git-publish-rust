@@ -1,6 +1,5 @@
 use crate::config;
 pub use crate::version::VersionBump;
-use regex;
 
 #[derive(Debug, PartialEq)]
 pub struct ParsedCommit {

@@ -215,4 +215,168 @@ mod git_operations_tests {
         // Change back to the original directory
         env::set_current_dir(original_dir).unwrap();
     }
+
+    #[test]
+    fn test_get_latest_lightweight_tag_on_branch() {
+        // Test that get_latest_tag_on_branch correctly finds lightweight tags
+        let temp_dir = TempDir::new().expect("Could not create temp dir");
+
+        // Initialize git repo
+        let repo = Repository::init(temp_dir.path()).expect("Could not init git repo");
+
+        // Configure git user
+        {
+            let mut config = repo.config().expect("Could not get config");
+            config
+                .set_str("user.name", "Test User")
+                .expect("Could not set user.name");
+            config
+                .set_str("user.email", "test@example.com")
+                .expect("Could not set user.email");
+        }
+
+        // Create initial commit
+        let content = b"Initial content\n";
+        let content_path = temp_dir.path().join("README.md");
+        fs::write(&content_path, content).expect("Could not write initial file");
+
+        let mut index = repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("README.md"))
+            .expect("Could not add file to index");
+        index.write().expect("Could not write index");
+
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = repo.find_tree(tree_id).expect("Could not find tree");
+
+        let commit_id = repo
+            .commit(
+                Some("HEAD"),
+                &repo.signature().expect("Could not get sig"),
+                &repo.signature().expect("Could not get sig"),
+                "Initial commit",
+                &tree,
+                &[],
+            )
+            .expect("Could not create commit");
+
+        // Create a LIGHTWEIGHT tag (not annotated tag)
+        repo.tag_lightweight("v1.0.0", &repo.find_object(commit_id, None).unwrap(), false)
+            .expect("Could not create lightweight tag");
+
+        // Change to the temp directory and test
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).expect("Could not change to temp dir");
+
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Could not create GitRepo");
+
+        // Get the latest tag on the branch
+        let latest_tag = git_repo
+            .get_latest_tag_on_branch("master")
+            .expect("Should get latest tag");
+
+        // Change back to the original directory
+        env::set_current_dir(original_dir).unwrap();
+
+        // Assert that the lightweight tag was found
+        assert_eq!(
+            latest_tag,
+            Some("v1.0.0".to_string()),
+            "Should find lightweight tag v1.0.0"
+        );
+    }
+
+    #[test]
+    fn test_get_commits_since_lightweight_tag() {
+        // Test that get_commits_since_tag works correctly with lightweight tags
+        let temp_dir = TempDir::new().expect("Could not create temp dir");
+
+        // Initialize git repo
+        let repo = Repository::init(temp_dir.path()).expect("Could not init git repo");
+
+        // Configure git user
+        {
+            let mut config = repo.config().expect("Could not get config");
+            config
+                .set_str("user.name", "Test User")
+                .expect("Could not set user.name");
+            config
+                .set_str("user.email", "test@example.com")
+                .expect("Could not set user.email");
+        }
+
+        // Create initial commit
+        let content = b"Initial content\n";
+        let content_path = temp_dir.path().join("README.md");
+        fs::write(&content_path, content).expect("Could not write initial file");
+
+        let mut index = repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("README.md"))
+            .expect("Could not add file to index");
+        index.write().expect("Could not write index");
+
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = repo.find_tree(tree_id).expect("Could not find tree");
+
+        let commit_id = repo
+            .commit(
+                Some("HEAD"),
+                &repo.signature().expect("Could not get sig"),
+                &repo.signature().expect("Could not get sig"),
+                "Initial commit",
+                &tree,
+                &[],
+            )
+            .expect("Could not create commit");
+
+        // Create a LIGHTWEIGHT tag
+        repo.tag_lightweight("v1.0.0", &repo.find_object(commit_id, None).unwrap(), false)
+            .expect("Could not create lightweight tag");
+
+        // Add new commits after the tag
+        let content2 = b"Updated content\n";
+        fs::write(&content_path, content2).expect("Could not write updated file");
+
+        let mut index = repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("README.md"))
+            .expect("Could not add file to index");
+        index.write().expect("Could not write index");
+
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = repo.find_tree(tree_id).expect("Could not find tree");
+
+        repo.commit(
+            Some("HEAD"),
+            &repo.signature().expect("Could not get sig"),
+            &repo.signature().expect("Could not get sig"),
+            "feat: add new feature",
+            &tree,
+            &[&repo.find_commit(commit_id).unwrap()],
+        )
+        .expect("Could not create commit");
+
+        // Change to the temp directory and test
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).expect("Could not change to temp dir");
+
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Could not create GitRepo");
+
+        // Get commits since the tag
+        let commits = git_repo
+            .get_commits_since_tag("master", Some("v1.0.0"))
+            .expect("Should get commits since tag");
+
+        // Change back to the original directory
+        env::set_current_dir(original_dir).unwrap();
+
+        // Should have exactly 1 commit after the tag
+        assert_eq!(commits.len(), 1, "Should have exactly 1 commit after tag");
+        assert_eq!(
+            commits[0].message().unwrap_or(""),
+            "feat: add new feature",
+            "Commit message should match"
+        );
+    }
 }

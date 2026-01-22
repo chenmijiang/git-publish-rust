@@ -86,6 +86,21 @@ fn main() -> Result<()> {
         }
     };
 
+    // Fetch latest from remote to ensure we have the latest tags and commits
+    ui::display_status("Fetching latest data from remote...");
+    match git_repo.fetch_from_remote("origin") {
+        Ok(_) => {
+            ui::display_success("Successfully fetched latest data from remote");
+        }
+        Err(e) => {
+            // Fetch failures are not fatal - proceed with local data
+            ui::display_status(&format!(
+                "Warning: Could not fetch from remote: {}. Using local branch data.",
+                e
+            ));
+        }
+    }
+
     // Get the latest tag on the selected branch
     let latest_tag = match git_repo.get_latest_tag_on_branch(&branch_to_tag) {
         Ok(tag) => tag,
@@ -118,11 +133,9 @@ fn main() -> Result<()> {
 
     if commits.is_empty() {
         ui::display_status("No new commits found since the last tag.");
-        if !args.force && !args.dry_run {
-            if !ui::confirm_action("Continue with no new commits?")? {
-                println!("Operation cancelled by user.");
-                return Ok(());
-            }
+        if !args.force && !args.dry_run && !ui::confirm_action("Continue with no new commits?")? {
+            println!("Operation cancelled by user.");
+            return Ok(());
         }
     }
 
@@ -161,11 +174,9 @@ fn main() -> Result<()> {
     ui::display_proposed_tag(latest_tag.as_deref(), &new_tag);
 
     // Confirm with the user
-    if !args.force && !args.dry_run {
-        if !ui::confirm_action("Create and push this tag?")? {
-            println!("Tag creation cancelled by user.");
-            return Ok(());
-        }
+    if !args.force && !args.dry_run && !ui::confirm_action("Create and push this tag?")? {
+        println!("Tag creation cancelled by user.");
+        return Ok(());
     }
 
     if args.dry_run {

@@ -15,6 +15,21 @@ impl GitRepo {
         Ok(GitRepo { repo })
     }
 
+    /// Fetch latest data from remote to ensure branch and tags are up-to-date
+    pub fn fetch_from_remote(&self, remote_name: &str) -> Result<()> {
+        let mut remote = self
+            .repo
+            .find_remote(remote_name)
+            .map_err(|_| anyhow::anyhow!("Remote '{}' not found", remote_name))?;
+
+        let refspecs: &[&str] = &[];
+        remote
+            .fetch(refspecs, None, None)
+            .map_err(|e| anyhow::anyhow!("Failed to fetch from remote '{}': {}", remote_name, e))?;
+
+        Ok(())
+    }
+
     pub fn get_branch_head_oid(&self, branch_name: &str) -> Result<Oid> {
         let branch = self.repo.find_branch(branch_name, BranchType::Local)?;
         let commit = branch.into_reference().peel_to_commit()?;
@@ -28,13 +43,14 @@ impl GitRepo {
         let mut revwalk = self.repo.revwalk()?;
         revwalk.push(branch_oid)?;
 
-        // Get all tags and their OIDs
+        // Get all tags and their OIDs (handles both lightweight and annotated tags)
         let mut tag_oids = std::collections::HashMap::new();
         let tags = self.repo.tag_names(None)?;
 
         for tag_name in tags.iter().flatten() {
             if let Ok(tag_ref) = self.repo.find_reference(&format!("refs/tags/{}", tag_name)) {
-                if let Ok(tag_obj) = tag_ref.peel(git2::ObjectType::Tag) {
+                // Peel to any object (commit, tag, etc.)
+                if let Ok(tag_obj) = tag_ref.peel(git2::ObjectType::Any) {
                     let tag_oid = tag_obj.id();
                     tag_oids.insert(tag_oid, tag_name.to_string());
                 }
@@ -114,7 +130,7 @@ impl GitRepo {
     pub fn create_tag(&self, tag_name: &str) -> Result<()> {
         let head = self.repo.head()?.peel_to_commit()?;
         self.repo
-            .tag_lightweight(tag_name, &head.as_object(), false)?;
+            .tag_lightweight(tag_name, head.as_object(), false)?;
         Ok(())
     }
 
