@@ -10,7 +10,7 @@ mod git_ops;
 mod ui;
 mod version;
 
-#[derive(clap::Parser)]
+#[derive(clap::Parser, Debug, Clone, PartialEq)]
 #[command(
     name = "git-publish",
     about = "Create and push git tags based on conventional commits"

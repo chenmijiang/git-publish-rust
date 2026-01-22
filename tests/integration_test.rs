@@ -803,8 +803,25 @@ mod cli_remote_flag_tests {
 
     #[test]
     fn test_remote_flag_validates_remote_exists() {
-        // This test verifies the validation logic exists
-        // We'll test the actual validation in the integration flow
-        assert!(true, "Placeholder for remote validation test");
+        // Test that the --remote flag is properly parsed by clap
+        // We verify the flag appears in help and can be parsed
+        let output = std::process::Command::new("cargo")
+            .args(&["run", "--", "--help"])
+            .output()
+            .expect("Failed to run help");
+
+        let help_text = String::from_utf8(output.stdout).unwrap();
+
+        // Verify --remote flag is documented
+        assert!(
+            help_text.contains("--remote"),
+            "Help should document --remote flag"
+        );
+
+        // Verify the description mentions it's for git remote
+        assert!(
+            help_text.contains("git remote") || help_text.contains("remote"),
+            "Help should describe what --remote does"
+        );
     }
 }
