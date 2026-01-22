@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Parser;
 
 use boundary::BoundaryWarning;
@@ -99,31 +99,16 @@ fn main() -> Result<()> {
 
     // Validate specified remote if provided
     if let Some(ref specified_remote) = args.remote {
-        match git_repo.remote_exists(specified_remote) {
-            Ok(true) => {
-                // Remote exists, continue
-            }
-            Ok(false) => {
-                // Remote doesn't exist, get available remotes and show error
-                let available = git_repo.list_remotes().unwrap_or_else(|_| vec![]);
-                if available.is_empty() {
-                    ui::display_error(&format!(
-                        "Remote '{}' not found, and no remotes are configured",
-                        specified_remote
-                    ));
-                } else {
-                    ui::display_error(&format!(
-                        "Remote '{}' not found. Available remotes: {}",
-                        specified_remote,
-                        available.join(", ")
-                    ));
-                }
-                std::process::exit(1);
-            }
-            Err(e) => {
-                ui::display_error(&format!("Failed to validate remote: {}", e));
-                std::process::exit(1);
-            }
+        if !git_repo
+            .remote_exists(specified_remote)
+            .context("Failed to validate remote")?
+        {
+            let available = git_repo.list_remotes()?;
+            anyhow::bail!(
+                "Remote '{}' not found. Available remotes: {}",
+                specified_remote,
+                available.join(", ")
+            );
         }
     }
 
