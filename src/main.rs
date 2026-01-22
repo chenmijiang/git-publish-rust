@@ -127,7 +127,12 @@ fn main() -> Result<()> {
         }
     };
 
-    // Determine which remote to use: CLI flag > config > interactive prompt
+    // Determine which remote to use with three-tier precedence:
+    // 1. CLI flag (--remote) - takes absolute precedence if provided
+    // 2. Config option (skip_remote_selection) - applies only to single-remote case
+    //    - If true and single remote exists: auto-select without prompting
+    //    - If false (default): always prompt user even for single remote
+    // 3. Interactive prompt - used for multiple remotes or when no CLI flag
     let selected_remote = if let Some(ref cli_remote) = args.remote {
         // CLI flag takes precedence
         cli_remote.clone()
