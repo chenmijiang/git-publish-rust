@@ -97,6 +97,36 @@ fn main() -> Result<()> {
         }
     };
 
+    // Validate specified remote if provided
+    if let Some(ref specified_remote) = args.remote {
+        match git_repo.remote_exists(specified_remote) {
+            Ok(true) => {
+                // Remote exists, continue
+            }
+            Ok(false) => {
+                // Remote doesn't exist, get available remotes and show error
+                let available = git_repo.list_remotes().unwrap_or_else(|_| vec![]);
+                if available.is_empty() {
+                    ui::display_error(&format!(
+                        "Remote '{}' not found, and no remotes are configured",
+                        specified_remote
+                    ));
+                } else {
+                    ui::display_error(&format!(
+                        "Remote '{}' not found. Available remotes: {}",
+                        specified_remote,
+                        available.join(", ")
+                    ));
+                }
+                std::process::exit(1);
+            }
+            Err(e) => {
+                ui::display_error(&format!("Failed to validate remote: {}", e));
+                std::process::exit(1);
+            }
+        }
+    }
+
     // Get available remotes and let user select one
     let available_remotes = match git_repo.list_remotes() {
         Ok(remotes) => {
@@ -112,7 +142,10 @@ fn main() -> Result<()> {
         }
     };
 
-    let selected_remote = if available_remotes.len() == 1 {
+    let selected_remote = if let Some(ref specified_remote) = args.remote {
+        // User specified a remote via --remote flag (already validated above)
+        specified_remote.clone()
+    } else if available_remotes.len() == 1 {
         available_remotes[0].clone()
     } else {
         ui::select_remote(&available_remotes)?

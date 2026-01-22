@@ -473,6 +473,23 @@ mod git_operations_tests {
 
         env::set_current_dir(original_dir).unwrap();
     }
+
+    #[test]
+    fn test_remote_exists_validates_remote_presence() {
+        let temp_dir = setup_test_repo();
+
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).expect("Could not change dir");
+
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Failed to create GitRepo");
+
+        // Test that a non-existent remote returns false
+        let result = git_repo.remote_exists("nonexistent_remote");
+        assert!(result.is_ok(), "remote_exists should not error");
+        assert!(!result.unwrap(), "Nonexistent remote should return false");
+
+        env::set_current_dir(original_dir).unwrap();
+    }
 }
 
 #[cfg(test)]
