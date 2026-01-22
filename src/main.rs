@@ -112,7 +112,7 @@ fn main() -> Result<()> {
         }
     }
 
-    // Get available remotes and let user select one
+    // Get available remotes for selection
     let available_remotes = match git_repo.list_remotes() {
         Ok(remotes) => {
             if remotes.is_empty() {
@@ -127,13 +127,26 @@ fn main() -> Result<()> {
         }
     };
 
-    let selected_remote = if let Some(ref specified_remote) = args.remote {
-        // User specified a remote via --remote flag (already validated above)
-        specified_remote.clone()
-    } else if available_remotes.len() == 1 {
-        available_remotes[0].clone()
+    // Determine which remote to use: CLI flag > config > interactive prompt
+    let selected_remote = if let Some(ref cli_remote) = args.remote {
+        // CLI flag takes precedence
+        cli_remote.clone()
     } else {
-        ui::select_remote(&available_remotes)?
+        // Check available remotes
+        if available_remotes.len() == 1 {
+            // Single remote case
+            let should_skip = config.behavior.skip_remote_selection;
+            if should_skip {
+                // Auto-select the single remote
+                available_remotes[0].clone()
+            } else {
+                // Prompt even though there's only one
+                ui::select_remote(&available_remotes)?
+            }
+        } else {
+            // Multiple remotes - always prompt (config only applies to single remote case)
+            ui::select_remote(&available_remotes)?
+        }
     };
 
     // Fetch latest from remote to ensure we have the latest tags and commits
