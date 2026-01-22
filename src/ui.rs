@@ -84,6 +84,51 @@ pub fn select_branch(available_branches: &[String]) -> Result<String> {
     }
 }
 
+/// Allows user to select a remote for fetch/push operations.
+///
+/// If only one remote exists, returns it directly without prompting.
+/// Displays all available remotes and allows selection, with "origin" as default.
+///
+/// # Arguments
+/// * `available_remotes` - List of remote names (should be pre-sorted with "origin" first if available)
+///
+/// # Returns
+/// * `Ok(String)` - The selected remote name
+/// * `Err` - If selection is invalid
+pub fn select_remote(available_remotes: &[String]) -> Result<String> {
+    if available_remotes.len() == 1 {
+        return Ok(available_remotes[0].clone());
+    }
+
+    println!("\n\x1b[1mAvailable remotes:\x1b[0m");
+    for (i, remote) in available_remotes.iter().enumerate() {
+        println!("  {}. {}", i + 1, remote);
+    }
+
+    print!(
+        "\nSelect a remote for fetch/push (1-{}) [default: 1]: ",
+        available_remotes.len()
+    );
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let selection = input.trim();
+
+    // If empty input, default to first remote (index 1)
+    let index = if selection.is_empty() {
+        1
+    } else {
+        selection.parse::<usize>().unwrap_or(0)
+    };
+
+    if index > 0 && index <= available_remotes.len() {
+        Ok(available_remotes[index - 1].clone())
+    } else {
+        Err(anyhow::anyhow!("Invalid remote selection"))
+    }
+}
+
 pub fn confirm_action(prompt: &str) -> Result<bool> {
     print!("\n{} (y/N): ", prompt);
     io::stdout().flush()?;

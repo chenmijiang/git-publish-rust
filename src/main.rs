@@ -90,11 +90,38 @@ fn main() -> Result<()> {
         }
     };
 
+    // Get available remotes and let user select one
+    let available_remotes = match git_repo.list_remotes() {
+        Ok(remotes) => {
+            if remotes.is_empty() {
+                ui::display_error("No remotes configured in this repository");
+                std::process::exit(1);
+            }
+            remotes
+        }
+        Err(e) => {
+            ui::display_error(&format!("Failed to list remotes: {}", e));
+            std::process::exit(1);
+        }
+    };
+
+    let selected_remote = if available_remotes.len() == 1 {
+        available_remotes[0].clone()
+    } else {
+        ui::select_remote(&available_remotes)?
+    };
+
     // Fetch latest from remote to ensure we have the latest tags and commits
-    ui::display_status("Fetching latest data from remote...");
-    match git_repo.fetch_from_remote("origin", &branch_to_tag) {
+    ui::display_status(&format!(
+        "Fetching latest data from '{}'...",
+        selected_remote
+    ));
+    match git_repo.fetch_from_remote(&selected_remote, &branch_to_tag) {
         Ok(_) => {
-            ui::display_success("Successfully fetched latest data from remote");
+            ui::display_success(&format!(
+                "Successfully fetched latest data from '{}'",
+                selected_remote
+            ));
         }
         Err(e) => {
             // Check if it's an authentication error
@@ -105,7 +132,7 @@ fn main() -> Result<()> {
                 || error_msg.contains("Permission")
             {
                 let warning = BoundaryWarning::FetchAuthenticationFailed {
-                    remote: "origin".to_string(),
+                    remote: selected_remote.clone(),
                 };
                 ui::display_boundary_warning(&warning);
 
@@ -119,8 +146,8 @@ fn main() -> Result<()> {
             } else {
                 // Non-auth errors are still warnings
                 ui::display_status(&format!(
-                    "Warning: Could not fetch from remote: {}. Using local branch data.",
-                    e
+                    "Warning: Could not fetch from remote '{}': {}. Using local branch data.",
+                    selected_remote, e
                 ));
             }
         }
@@ -237,8 +264,8 @@ fn main() -> Result<()> {
         ui::display_success(&format!("  Step 1: Will create local tag: {}", final_tag));
         ui::display_success("  Step 2: Will ask whether to push tag to remote");
         ui::display_success(&format!(
-            "  Step 3: (Optional) Push {} to origin",
-            final_tag
+            "  Step 3: (Optional) Push {} to '{}'",
+            final_tag, selected_remote
         ));
         return Ok(());
     }
@@ -253,15 +280,18 @@ fn main() -> Result<()> {
 
     // Step 2: Ask user whether to push the tag
     let should_push = if !args.force {
-        ui::confirm_push_tag(&final_tag, "origin")?
+        ui::confirm_push_tag(&final_tag, &selected_remote)?
     } else {
         true // In force mode, push automatically
     };
 
     // Step 3: Push if user confirmed (or in force mode)
     if should_push {
-        ui::display_status(&format!("Pushing tag: {} to remote", final_tag));
-        if let Err(e) = git_repo.push_tag(&final_tag) {
+        ui::display_status(&format!(
+            "Pushing tag: {} to remote '{}'",
+            final_tag, selected_remote
+        ));
+        if let Err(e) = git_repo.push_tag(&final_tag, &selected_remote) {
             ui::display_error(&format!("Failed to push tag '{}': {}", final_tag, e));
             std::process::exit(1);
         }
@@ -273,7 +303,7 @@ fn main() -> Result<()> {
         );
     } else {
         // Tag created locally, but not pushed
-        ui::display_manual_push_instruction(&final_tag, "origin");
+        ui::display_manual_push_instruction(&final_tag, &selected_remote);
 
         println!(
             "\n\x1b[32m✓\x1b[0m Tag {} created locally for branch {}\n",

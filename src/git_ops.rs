@@ -26,6 +26,35 @@ impl GitRepo {
         Ok(GitRepo { repo })
     }
 
+    /// Gets all configured remote names from the repository.
+    ///
+    /// Remotes are sorted with "origin" first (if it exists), followed by others alphabetically.
+    ///
+    /// # Returns
+    /// * `Ok(Vec<String>)` - Vector of remote names (e.g., ["origin", "upstream"])
+    /// * `Err` - If unable to list remotes
+    pub fn list_remotes(&self) -> Result<Vec<String>> {
+        let remote_names = self.repo.remotes()?;
+        let mut remotes = Vec::new();
+
+        for name in remote_names.iter().flatten() {
+            remotes.push(name.to_string());
+        }
+
+        // Sort remotes for consistent display, with "origin" first if it exists
+        remotes.sort_by(|a, b| {
+            if a == "origin" {
+                std::cmp::Ordering::Less
+            } else if b == "origin" {
+                std::cmp::Ordering::Greater
+            } else {
+                a.cmp(b)
+            }
+        });
+
+        Ok(remotes)
+    }
+
     /// Fetches latest data from a remote repository and updates the specified branch.
     ///
     /// Fetches from the remote and updates both remote-tracking branches and the specified
@@ -347,20 +376,21 @@ impl GitRepo {
         Ok(())
     }
 
-    /// Pushes a tag to the "origin" remote.
+    /// Pushes a tag to a specified remote.
     ///
     /// Attempts to authenticate using SSH credentials from ~/.ssh/id_rsa.
     ///
     /// # Arguments
     /// * `tag_name` - Name of the tag to push
+    /// * `remote_name` - Name of the remote to push to (e.g., "origin", "upstream")
     ///
     /// # Returns
     /// * `Ok(())` - Tag pushed successfully
     /// * `Err` - If push fails (network, auth, or reference error)
-    pub fn push_tag(&self, tag_name: &str) -> Result<()> {
-        let mut remote = match self.repo.find_remote("origin") {
+    pub fn push_tag(&self, tag_name: &str, remote_name: &str) -> Result<()> {
+        let mut remote = match self.repo.find_remote(remote_name) {
             Ok(remote) => remote,
-            Err(_) => return Err(anyhow::anyhow!("No remote named 'origin' found")),
+            Err(_) => return Err(anyhow::anyhow!("No remote named '{}' found", remote_name)),
         };
 
         let mut push_options = git2::PushOptions::new();

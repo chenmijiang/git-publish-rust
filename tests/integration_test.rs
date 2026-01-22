@@ -637,3 +637,146 @@ mod fetch_refspec_tests {
         env::set_current_dir(original_dir).unwrap();
     }
 }
+
+#[cfg(test)]
+mod remote_selection_tests {
+    use git2::Repository;
+    use std::env;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_list_remotes_returns_all_configured_remotes() {
+        // Create a temporary git repository with multiple remotes
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("Failed to init repo");
+
+        // Add multiple remotes
+        repo.remote("origin", "https://github.com/user/origin.git")
+            .expect("Failed to add origin remote");
+        repo.remote("upstream", "https://github.com/upstream/repo.git")
+            .expect("Failed to add upstream remote");
+        repo.remote("fork", "https://github.com/fork/repo.git")
+            .expect("Failed to add fork remote");
+
+        // Change to temp directory
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).expect("Could not change dir");
+
+        // Test list_remotes
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Failed to create GitRepo");
+        let remotes = git_repo.list_remotes().expect("Failed to list remotes");
+
+        env::set_current_dir(original_dir).unwrap();
+
+        // Verify all remotes are present
+        assert_eq!(remotes.len(), 3, "Should have 3 remotes");
+        assert!(remotes.contains(&"origin".to_string()));
+        assert!(remotes.contains(&"upstream".to_string()));
+        assert!(remotes.contains(&"fork".to_string()));
+    }
+
+    #[test]
+    fn test_list_remotes_orders_origin_first() {
+        // Create a temporary git repository with remotes
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("Failed to init repo");
+
+        // Add remotes in non-alphabetical order (to test sorting)
+        repo.remote("zebra", "https://github.com/user/zebra.git")
+            .expect("Failed to add zebra remote");
+        repo.remote("origin", "https://github.com/user/origin.git")
+            .expect("Failed to add origin remote");
+        repo.remote("apple", "https://github.com/user/apple.git")
+            .expect("Failed to add apple remote");
+
+        // Change to temp directory
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).expect("Could not change dir");
+
+        // Test list_remotes
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Failed to create GitRepo");
+        let remotes = git_repo.list_remotes().expect("Failed to list remotes");
+
+        env::set_current_dir(original_dir).unwrap();
+
+        // Verify origin is first, then others alphabetically
+        assert_eq!(remotes[0], "origin", "Origin should be first");
+        assert!(remotes.contains(&"apple".to_string()));
+        assert!(remotes.contains(&"zebra".to_string()));
+    }
+
+    #[test]
+    fn test_list_remotes_single_remote() {
+        // Create a temporary git repository with single remote
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("Failed to init repo");
+
+        // Add single remote
+        repo.remote("origin", "https://github.com/user/repo.git")
+            .expect("Failed to add origin remote");
+
+        // Change to temp directory
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).expect("Could not change dir");
+
+        // Test list_remotes
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Failed to create GitRepo");
+        let remotes = git_repo.list_remotes().expect("Failed to list remotes");
+
+        env::set_current_dir(original_dir).unwrap();
+
+        // Verify single remote is returned
+        assert_eq!(remotes.len(), 1);
+        assert_eq!(remotes[0], "origin");
+    }
+
+    #[test]
+    fn test_push_tag_accepts_remote_parameter() {
+        // This test verifies that push_tag function signature accepts remote_name parameter
+        // We're testing the function exists and has correct signature
+        // Actual push is tested separately with mocking
+
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("Failed to init repo");
+
+        // Add a remote
+        repo.remote("origin", "https://github.com/user/repo.git")
+            .expect("Failed to add remote");
+
+        // Create an initial commit
+        let sig = repo.signature().expect("Could not get signature");
+        let tree_id = repo
+            .index()
+            .expect("Could not get index")
+            .write_tree()
+            .expect("Could not write tree");
+        let tree = repo.find_tree(tree_id).expect("Could not find tree");
+
+        repo.commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .expect("Could not create commit");
+
+        // Change to temp directory
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).expect("Could not change dir");
+
+        // Test that push_tag accepts remote_name parameter
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Failed to create GitRepo");
+
+        // Create a test tag
+        git_repo.create_tag("v1.0.0").expect("Failed to create tag");
+
+        // Test that push_tag can be called with remote parameter
+        // It will fail because we don't have a real remote, but that's OK
+        // We're testing that the function accepts the parameter
+        let result = git_repo.push_tag("v1.0.0", "origin");
+
+        env::set_current_dir(original_dir).unwrap();
+
+        // The push will fail, but that's expected (not a real remote)
+        // We just verify the function signature accepts remote_name
+        assert!(
+            result.is_err(),
+            "Push will fail with fake remote, which is expected"
+        );
+    }
+}
