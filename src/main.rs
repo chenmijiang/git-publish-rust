@@ -22,6 +22,13 @@ struct Args {
     #[arg(short, long, help = "Explicitly specify branch to tag")]
     branch: Option<String>,
 
+    #[arg(
+        short,
+        long,
+        help = "Specify which git remote to fetch from and push to"
+    )]
+    remote: Option<String>,
+
     #[arg(short, long, help = "Skip confirmation prompts")]
     force: bool,
 

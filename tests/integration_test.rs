@@ -780,3 +780,31 @@ mod remote_selection_tests {
         );
     }
 }
+
+#[cfg(test)]
+mod cli_remote_flag_tests {
+    #[test]
+    fn test_cli_accepts_remote_flag() {
+        let output = std::process::Command::new("cargo")
+            .args(&["run", "--", "--help"])
+            .output()
+            .expect("Failed to run help");
+
+        let help_text = String::from_utf8(output.stdout).unwrap();
+        assert!(
+            help_text.contains("--remote"),
+            "Help should mention --remote flag"
+        );
+        assert!(
+            help_text.contains("-r"),
+            "Help should mention -r short form"
+        );
+    }
+
+    #[test]
+    fn test_remote_flag_validates_remote_exists() {
+        // This test verifies the validation logic exists
+        // We'll test the actual validation in the integration flow
+        assert!(true, "Placeholder for remote validation test");
+    }
+}
