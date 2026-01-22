@@ -60,15 +60,25 @@ pub fn select_branch(available_branches: &[String]) -> Result<String> {
         println!("  {}. {}", i + 1, branch);
     }
 
-    print!("\nSelect a branch (1-{}): ", available_branches.len());
+    print!(
+        "\nSelect a branch (1-{}) [default: 1]: ",
+        available_branches.len()
+    );
     std::io::stdout().flush().unwrap(); // Need to import std::io::Write
 
     let mut input = String::new();
     std::io::stdin().read_line(&mut input)?;
-    let selection = input.trim().parse::<usize>().unwrap_or(0);
+    let selection = input.trim();
 
-    if selection > 0 && selection <= available_branches.len() {
-        Ok(available_branches[selection - 1].clone())
+    // If empty input, default to first branch (index 1)
+    let index = if selection.is_empty() {
+        1
+    } else {
+        selection.parse::<usize>().unwrap_or(0)
+    };
+
+    if index > 0 && index <= available_branches.len() {
+        Ok(available_branches[index - 1].clone())
     } else {
         Err(anyhow::anyhow!("Invalid selection"))
     }
@@ -248,14 +258,16 @@ pub fn confirm_tag_use(tag: &str, pattern: &str) -> Result<bool> {
     validate_tag_format(tag, pattern)?;
 
     // If validation passed, confirm with user
-    print!("\nConfirm tag creation: {} (y/N): ", tag);
+    // Default is Y (confirm) - user needs to enter 'n' or 'no' to decline
+    print!("\nConfirm tag creation: {} (Y/n): ", tag);
     io::stdout().flush()?;
 
     let mut input = String::new();
     io::stdin().read_line(&mut input)?;
 
     let response = input.trim().to_lowercase();
-    Ok(response == "y" || response == "yes")
+    // Default to true (confirm) if empty input; only return false if user explicitly says 'n' or 'no'
+    Ok(!(response == "n" || response == "no"))
 }
 
 /// Confirms whether to push a locally created tag to a remote.

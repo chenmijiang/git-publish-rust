@@ -586,6 +586,14 @@ mod fetch_refspec_tests {
         let work_repo = Repository::clone(origin_dir.path().to_str().unwrap(), work_dir.path())
             .expect("Could not clone repo");
 
+        // Determine the actual branch name of the cloned repo's HEAD instead of
+        // assuming "master" — some environments use "main" or other defaults.
+        let cloned_branch = work_repo
+            .head()
+            .ok()
+            .and_then(|h| h.shorthand().map(|s| s.to_string()))
+            .unwrap_or_else(|| "master".to_string());
+
         // Make a new commit in the work repo (while on master/main branch)
         let work_file = work_dir.path().join("test.txt");
         fs::write(&work_file, "modified content").expect("Could not write file");
@@ -619,8 +627,8 @@ mod fetch_refspec_tests {
 
         let git_repo = git_publish::git_ops::GitRepo::new().expect("Could not create GitRepo");
 
-        // This should succeed with the explicit refspecs
-        let fetch_result = git_repo.fetch_from_remote("origin", "master");
+        // This should succeed with the explicit refspecs (use detected branch)
+        let fetch_result = git_repo.fetch_from_remote("origin", &cloned_branch);
         assert!(
             fetch_result.is_ok(),
             "Fetch should succeed even when current branch is the target branch"

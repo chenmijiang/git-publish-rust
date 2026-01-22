@@ -61,8 +61,9 @@ fn main() -> Result<()> {
     let branch_to_tag = if let Some(branch) = args.branch {
         branch
     } else {
-        // Get configured branches as a vector
-        let configured_branches: Vec<String> = config.branches.keys().cloned().collect();
+        // Get configured branches as a sorted vector
+        let mut configured_branches: Vec<String> = config.branches.keys().cloned().collect();
+        configured_branches.sort();
         if configured_branches.is_empty() {
             ui::display_error("No branches configured for tagging in gitpublish.toml");
             std::process::exit(1);
@@ -291,7 +292,8 @@ fn list_configured_branches(config_path: Option<&str>) -> Result<()> {
             std::process::exit(1);
         }
     };
-    let branches: Vec<String> = config.branches.keys().cloned().collect();
+    let mut branches: Vec<String> = config.branches.keys().cloned().collect();
+    branches.sort();
 
     if branches.is_empty() {
         ui::display_error("No branches configured for tagging in gitpublish.toml");
