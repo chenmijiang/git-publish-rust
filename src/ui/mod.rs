@@ -152,7 +152,6 @@ pub fn confirm_action(prompt: &str) -> Result<bool> {
 /// validate_tag_format("v1.2.3-release", "v{version}-release")   // Ok
 /// validate_tag_format("anything", "free-form")                  // Ok (no {version})
 /// ```
-#[allow(dead_code)]
 pub fn validate_tag_format(tag: &str, pattern: &str) -> Result<()> {
     // If pattern doesn't contain {version}, no validation needed
     if !pattern.contains("{version}") {

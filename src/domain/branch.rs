@@ -16,11 +16,6 @@ impl BranchContext {
             is_main,
         }
     }
-
-    /// Check if this is a release branch (main/master)
-    pub fn is_release_branch(&self) -> bool {
-        self.is_main
-    }
 }
 
 #[cfg(test)]
@@ -31,7 +26,6 @@ mod tests {
     fn test_main_branch() {
         let branch = BranchContext::new("main");
         assert!(branch.is_main);
-        assert!(branch.is_release_branch());
     }
 
     #[test]
@@ -44,6 +38,5 @@ mod tests {
     fn test_develop_branch() {
         let branch = BranchContext::new("develop");
         assert!(!branch.is_main);
-        assert!(!branch.is_release_branch());
     }
 }

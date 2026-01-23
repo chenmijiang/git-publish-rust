@@ -56,31 +56,6 @@ fn test_boundary_warning_unparsable_tag_display() {
 }
 
 #[test]
-fn test_boundary_warning_tag_mismatch_pattern_display() {
-    let warning = BoundaryWarning::TagMismatchPattern {
-        tag: "my-tag".to_string(),
-        pattern: "v{version}".to_string(),
-    };
-
-    let display_msg = warning.to_string();
-    assert!(
-        display_msg.contains("does not match pattern"),
-        "Message should contain 'does not match pattern', got: {}",
-        display_msg
-    );
-    assert!(
-        display_msg.contains("my-tag"),
-        "Message should contain tag 'my-tag', got: {}",
-        display_msg
-    );
-    assert!(
-        display_msg.contains("v{version}"),
-        "Message should contain pattern 'v{{version}}', got: {}",
-        display_msg
-    );
-}
-
-#[test]
 fn test_boundary_warning_fetch_auth_failed_display() {
     let warning = BoundaryWarning::FetchAuthenticationFailed {
         remote: "origin".to_string(),

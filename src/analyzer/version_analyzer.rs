@@ -2,15 +2,12 @@ use crate::config::ConventionalCommitsConfig;
 use crate::domain::{ParsedCommit, VersionBump};
 
 /// Analyzes commits to determine version bump type
-pub struct VersionAnalyzer {
-    #[allow(dead_code)]
-    config: ConventionalCommitsConfig,
-}
+pub struct VersionAnalyzer;
 
 impl VersionAnalyzer {
     /// Create a new version analyzer
-    pub fn new(config: ConventionalCommitsConfig) -> Self {
-        VersionAnalyzer { config }
+    pub fn new(_config: ConventionalCommitsConfig) -> Self {
+        VersionAnalyzer
     }
 
     /// Analyze commit messages and determine version bump
@@ -45,15 +42,12 @@ impl VersionAnalyzer {
     fn is_feature(&self, commit_type: &str) -> bool {
         commit_type == "feat" || commit_type == "feature"
     }
-
-    #[allow(dead_code)]
-    fn is_fix(&self, commit_type: &str) -> bool {
-        matches!(commit_type, "fix" | "perf" | "refactor")
-    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::config::ConventionalCommitsConfig;
+
     use super::*;
 
     #[test]

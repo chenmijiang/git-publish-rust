@@ -10,32 +10,14 @@ pub fn display_error(message: &str) {
     eprintln!("\x1b[31mERROR:\x1b[0m {}", message);
 }
 
-/// Format an error message with color (without printing).
-#[allow(dead_code)]
-pub fn format_error(message: &str) -> String {
-    format!("\x1b[31mERROR:\x1b[0m {}", message)
-}
-
 /// Format and print a success message with green checkmark.
 pub fn display_success(message: &str) {
     println!("\x1b[32m✓\x1b[0m {}", message);
 }
 
-/// Format a success message with green checkmark (without printing).
-#[allow(dead_code)]
-pub fn format_success(message: &str) -> String {
-    format!("\x1b[32m✓\x1b[0m {}", message)
-}
-
 /// Format and print a status message with yellow arrow.
 pub fn display_status(message: &str) {
     println!("\x1b[33m→\x1b[0m {}", message);
-}
-
-/// Format a status message with yellow arrow (without printing).
-#[allow(dead_code)]
-pub fn format_status(message: &str) -> String {
-    format!("\x1b[33m→\x1b[0m {}", message)
 }
 
 /// Display commit analysis for a branch.
@@ -130,20 +112,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_format_error() {
-        let result = format_error("test error");
-        assert_eq!(result, "\x1b[31mERROR:\x1b[0m test error");
+    fn test_display_error() {
+        // Visual verification test - output is printed to stderr
+        display_error("test error");
     }
 
     #[test]
-    fn test_format_success() {
-        let result = format_success("test success");
-        assert_eq!(result, "\x1b[32m✓\x1b[0m test success");
+    fn test_display_success() {
+        // Visual verification test - output is printed to stdout
+        display_success("test success");
     }
 
     #[test]
-    fn test_format_status() {
-        let result = format_status("test status");
-        assert_eq!(result, "\x1b[33m→\x1b[0m test status");
+    fn test_display_status() {
+        // Visual verification test - output is printed to stdout
+        display_status("test status");
     }
 }

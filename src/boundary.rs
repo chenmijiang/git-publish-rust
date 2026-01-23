@@ -11,9 +11,7 @@ pub enum BoundaryWarning {
     },
     /// Tag exists but cannot be parsed as a semantic version
     UnparsableTag { tag: String, reason: String },
-    /// Tag exists but doesn't match the configured pattern
-    #[allow(dead_code)]
-    TagMismatchPattern { tag: String, pattern: String },
+
     /// Fetch operation failed due to authentication issues
     FetchAuthenticationFailed { remote: String },
 }
@@ -38,9 +36,6 @@ impl fmt::Display for BoundaryWarning {
             }
             BoundaryWarning::UnparsableTag { tag, reason } => {
                 write!(f, "Cannot parse tag '{}': {}", tag, reason)
-            }
-            BoundaryWarning::TagMismatchPattern { tag, pattern } => {
-                write!(f, "Tag '{}' does not match pattern '{}'", tag, pattern)
             }
             BoundaryWarning::FetchAuthenticationFailed { remote } => {
                 write!(
