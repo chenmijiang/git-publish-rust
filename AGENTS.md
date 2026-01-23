@@ -1,123 +1,204 @@
-# AGENTS.md - Git Publish Development Guide
+# AGENTS.md - Development Guide for Agentic Coding
 
-**git-publish** is a Rust CLI for creating and pushing git tags based on conventional commit analysis with semantic versioning.
+This guide provides essential commands, code style guidelines, and patterns for agentic coding in git-publish.
 
-**Tech Stack:** Rust 2021, clap (CLI), serde (TOML), git2, anyhow/thiserror (errors)
+## Quick Commands
 
-## Build, Lint, and Test
-
+### Running Tests
 ```bash
-# Build & Run
-cargo build && cargo run -- --help
+# Run all unit tests
+cargo test --lib
 
-# All tests
-cargo test
+# Run a single test
+cargo test --lib test_name -- --exact
 
-# Single test by name
-cargo test test_load_default_config
+# Run tests in a specific module
+cargo test --lib domain::version::tests
 
-# Specific test file
-cargo test --test config_test
+# Run with output
+cargo test --lib -- --nocapture
 
-# Full validation
-cargo fmt && cargo clippy -- -D warnings && cargo test
+# Run tests sequentially (required for tests with serial_test)
+cargo test --lib -- --test-threads=1
+```
+
+### Code Quality
+```bash
+# Format code (auto-fixes)
+cargo fmt
+
+# Check formatting without changes
+cargo fmt --check
+
+# Run linter (strict: denies all warnings)
+cargo clippy -- -D warnings
+
+# Build project
+cargo build
+
+# Complete validation pipeline
+cargo fmt && cargo clippy -- -D warnings && cargo test --lib && cargo build
 ```
 
 ## Code Style Guidelines
 
-### Imports & Organization
+### Module & Import Organization
+1. **Standard library imports first**, then external crates, then internal modules
+2. **Use absolute paths** for internal imports: `use crate::domain::Version;`
+3. **Order imports**: std → external → crate
+4. **Group related imports** together
 
-- **Order**: Standard library → External crates → Internal modules
-- Group imports with blank lines separating categories
-- Use explicit imports (avoid glob imports `*`)
-- Place `use` statements at module top before other code
-
-**Example:**
+Example:
 ```rust
-use std::collections::HashMap;
-use std::fs;
+use std::fmt;
+use regex::Regex;
+use thiserror::Error;
 
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
-
-use crate::config;
-use crate::version;
+use crate::domain::PreRelease;
+use crate::error::{GitPublishError, Result};
 ```
 
-### Formatting & Naming
+### Naming Conventions
+- **Modules & files**: `snake_case` (e.g., `version_analyzer.rs`)
+- **Types & structs**: `PascalCase` (e.g., `VersionAnalyzer`)
+- **Functions & variables**: `snake_case` (e.g., `analyze_messages()`)
+- **Constants**: `UPPER_SNAKE_CASE` (e.g., `MAX_RETRIES`)
 
-- `snake_case` for functions and variables
-- `PascalCase` for types, structs, enums
-- `UPPER_SNAKE_CASE` for constants
-- Descriptive names: `parse_conventional_commit` not `parse_cc`
-- Use `cargo fmt` (enforced)
+### Type Annotations
+- **All public functions** must have explicit type annotations
+- **Return types** always annotated, even for `()`
+- Use `Result<T>` type alias instead of `std::result::Result<T, GitPublishError>`
 
-### Types & Generics
-
-- Required type annotations on public functions/structs
-- Derive traits: `#[derive(Debug, Clone, PartialEq)]` for all public types
-
-**Example:**
+Example:
 ```rust
-#[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct Config {
-    pub branches: HashMap<String, String>,
-    #[serde(default)]
-    pub conventional_commits: ConventionalCommitsConfig,
+pub fn parse(tag: &str) -> Result<Version> {
+    // implementation
+}
+
+fn analyze_messages(&self, messages: &[String]) -> VersionBump {
+    // implementation
 }
 ```
 
 ### Error Handling
+- **Never use `unwrap()` or `panic!()`** in library code
+- **Use `Result<T>` for fallible operations**
+- **Use `?` operator** for error propagation
+- **Use `GitPublishError` helper methods**: `.version()`, `.config()`, `.tag()`, `.remote()`
+- **Provide context** in error messages
 
-**Use anyhow for application errors:**
+Good:
 ```rust
-use anyhow::{Result, Context};
-
-fn load_config(path: &str) -> Result<Config> {
-    let contents = fs::read_to_string(path)
-        .context("Failed to read config file")?;
-    Ok(config)
+fn load_version(path: &str) -> Result<Version> {
+    let content = std::fs::read_to_string(path)
+        .map_err(|e| GitPublishError::Io(e))?;
+    Version::parse(&content)
 }
 ```
 
-**Never panic in production code** - return `Result<T>` instead.
+Bad:
+```rust
+fn load_version(path: &str) -> Version {
+    let content = std::fs::read_to_string(path).unwrap();
+    Version::parse(&content).unwrap()
+}
+```
+
+### Documentation
+- **All public items** must have doc comments (`///`)
+- **Include descriptions** of what, not just how
+- **Add examples** for complex functions
+- **Note panics** if any exist (though they shouldn't in library code)
+
+Example:
+```rust
+/// Bump the version according to the bump type
+///
+/// Applies the specified bump to create a new version.
+/// Pre-release versions are cleared on major/minor/patch bumps.
+pub fn bump(&self, bump_type: &VersionBump) -> Self {
+    // implementation
+}
+```
 
 ### Testing
+- **Tests live inline** with `#[cfg(test)] mod tests { ... }`
+- **Test both success and error cases**
+- **Use descriptive test names**: `test_<function>_<scenario>`
+- **Test public functions** at minimum; private functions rarely need tests
+- **Use `assert_eq!` for equality**, other assertions for boolean checks
 
-- Unit tests in `src/` files: `#[cfg(test)] mod tests { ... }`
-- Integration tests in `tests/` directory as separate `.rs` files
-- Use `tempfile::NamedTempFile` for fixtures
-
-**Example:**
+Example:
 ```rust
-#[test]
-fn test_load_default_config() {
-    let config = Config::default();
-    assert_eq!(config.branches.get("main"), Some(&"v{version}".to_string()));
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_valid_version() {
+        let v = Version::parse("v1.2.3").unwrap();
+        assert_eq!(v.major, 1);
+        assert_eq!(v.minor, 2);
+        assert_eq!(v.patch, 3);
+    }
+
+    #[test]
+    fn test_parse_invalid_version_fails() {
+        let result = Version::parse("invalid");
+        assert!(result.is_err());
+    }
 }
 ```
 
-### Documentation & Comments
+## Key Patterns
 
-- Doc comments for all public APIs
-- Inline comments only for complex logic (explain why, not what)
-- No obvious comments like `i += 1; // increment i`
+### Result Type Alias
+```rust
+// Always use this in git-publish
+pub type Result<T> = std::result::Result<T, GitPublishError>;
+```
 
-### Module Organization
+### Conventional Commits Parsing
+- Type must be lowercase
+- Scope is optional in `()`
+- `!` or `BREAKING CHANGE:` indicates breaking changes
+- Format: `type(scope)!: description`
 
-- **src/lib.rs** - Public API exports
-- **src/main.rs** - CLI entry point, argument parsing
-- **src/config.rs** - Configuration loading and structures
-- **src/conventional.rs** - Conventional commit parsing
-- **src/git_ops.rs** - Git operations (tagging, pushing)
-- **src/version.rs** - Version parsing and bumping
-- **src/ui.rs** - User interaction (prompts, formatting)
+### Version Representation
+- Stored as `MAJOR.MINOR.PATCH-PRERELEASE` (semver compliant)
+- Pre-release versions handled via `PreRelease` struct
+- Parsing and display via `Version` impl
 
-## Key Standards Summary
+### Configuration
+- Load from `gitpublish.toml` or defaults
+- Uses `serde` for deserialization
+- Validate on load, not later
 
-1. **Format before commit**: Run `cargo fmt && cargo clippy -- -D warnings && cargo test`
-2. **Always test**: New code requires tests in `tests/` or inline `#[test]`
-3. **Use Result<T>**: Never unwrap outside tests
-4. **Document public APIs**: All pub fns/types need doc comments
-5. **Handle errors gracefully**: Use anyhow context for application errors
-6. **Follow Rust conventions**: The Rust Book and API Guidelines
+## Project Structure
+
+```
+src/
+├── main.rs              # CLI entry point
+├── lib.rs               # Public API exports
+├── error.rs             # Unified error type
+├── config.rs            # Configuration loading
+├── domain/              # Pure business logic (zero dependencies)
+├── analyzer/            # Version analysis logic
+├── git_ops.rs           # Git abstraction
+├── ui/                  # User interface
+└── boundary.rs          # Boundary warnings
+
+tests/                   # Integration tests
+```
+
+## Linting & Formatting Rules
+
+- **Rust Edition**: 2021
+- **Clippy**: All warnings denied (`-D warnings`)
+- **Rustfmt**: Default settings (auto-run with `cargo fmt`)
+- **No unsafe code** without explicit justification
+- **No external build scripts**
+
+---
+
+Generated: 2025-01-23
