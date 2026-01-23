@@ -294,4 +294,122 @@ mod tests {
         let v2 = Version::new(1, 2, 3);
         assert_ne!(v1, v2);
     }
+
+    // Integration tests: pre-release version workflows
+    #[test]
+    fn test_prerelease_bump_from_stable_to_beta() {
+        let _stable = Version::new(1, 0, 0);
+        let pr = PreRelease::new(PreReleaseType::Beta, None);
+        let beta = Version::with_prerelease(1, 0, 0, Some(pr));
+        assert_eq!(
+            beta.prerelease.as_ref().unwrap().identifier,
+            PreReleaseType::Beta
+        );
+        assert_eq!(beta.prerelease.as_ref().unwrap().iteration, None);
+    }
+
+    #[test]
+    fn test_prerelease_iteration_increment_workflow() {
+        // Start with v1.0.0-beta.1
+        let v1 = Version::parse("v1.0.0-beta.1").unwrap();
+
+        // Increment to v1.0.0-beta.2
+        let incremented = v1.prerelease.as_ref().unwrap().increment_iteration();
+        let v2 = Version::with_prerelease(1, 0, 0, Some(incremented));
+
+        assert_eq!(v2.to_string(), "1.0.0-beta.2");
+    }
+
+    #[test]
+    fn test_prerelease_rc_to_stable_release() {
+        // Start with v1.2.0-rc.3
+        let rc = Version::parse("v1.2.0-rc.3").unwrap();
+
+        // Release as stable v1.2.0
+        let stable = rc.bump(&VersionBump::Patch);
+
+        assert_eq!(stable.to_string(), "1.2.1");
+        assert_eq!(stable.prerelease, None);
+    }
+
+    #[test]
+    fn test_prerelease_mixed_version_types() {
+        // Parse various pre-release formats
+        let alpha = Version::parse("v1.0.0-alpha").unwrap();
+        let beta1 = Version::parse("v1.0.0-beta.1").unwrap();
+        let rc2 = Version::parse("v1.0.0-rc.2").unwrap();
+        let custom = Version::parse("v1.0.0-dev.5").unwrap();
+
+        assert_eq!(alpha.to_string(), "1.0.0-alpha");
+        assert_eq!(beta1.to_string(), "1.0.0-beta.1");
+        assert_eq!(rc2.to_string(), "1.0.0-rc.2");
+        assert_eq!(custom.to_string(), "1.0.0-dev.5");
+    }
+
+    #[test]
+    fn test_prerelease_custom_identifier() {
+        let staging = Version::parse("v2.1.0-staging.10").unwrap();
+
+        assert_eq!(staging.major, 2);
+        assert_eq!(staging.minor, 1);
+        assert_eq!(staging.patch, 0);
+        let pr = staging.prerelease.unwrap();
+        assert_eq!(pr.identifier, PreReleaseType::Custom("staging".to_string()));
+        assert_eq!(pr.iteration, Some(10));
+    }
+
+    #[test]
+    fn test_prerelease_bump_from_beta_preserves_major_minor() {
+        let beta = Version::parse("v1.5.0-beta.1").unwrap();
+        let minor_bump = beta.bump(&VersionBump::Minor);
+
+        assert_eq!(minor_bump.major, 1);
+        assert_eq!(minor_bump.minor, 6);
+        assert_eq!(minor_bump.patch, 0);
+        assert_eq!(minor_bump.prerelease, None);
+    }
+
+    #[test]
+    fn test_prerelease_major_bump_clears_prerelease() {
+        let rc = Version::parse("v1.9.9-rc.5").unwrap();
+        let major_bump = rc.bump(&VersionBump::Major);
+
+        assert_eq!(major_bump.to_string(), "2.0.0");
+        assert_eq!(major_bump.prerelease, None);
+    }
+
+    #[test]
+    fn test_prerelease_roundtrip_parse_display() {
+        let versions = vec![
+            "1.0.0-alpha",
+            "1.0.0-beta.1",
+            "1.0.0-rc.2",
+            "2.3.4-staging.10",
+            "0.0.1-alpha",
+        ];
+
+        for version_str in versions {
+            let parsed = Version::parse(version_str).unwrap();
+            let displayed = parsed.to_string();
+            assert_eq!(displayed, version_str);
+        }
+    }
+
+    #[test]
+    fn test_prerelease_multiple_iteration_increments() {
+        let v0 = Version::parse("v1.0.0-beta").unwrap();
+        let pr = v0.prerelease.unwrap();
+
+        // Increment from None to 1
+        let pr1 = pr.increment_iteration();
+        assert_eq!(pr1.to_string(), "beta.1");
+
+        // Increment from 1 to 2
+        let pr2 = pr1.increment_iteration();
+        assert_eq!(pr2.to_string(), "beta.2");
+
+        // Increment from 2 to 3
+        let pr3 = pr2.increment_iteration();
+        assert_eq!(pr3.to_string(), "beta.3");
+    }
 }

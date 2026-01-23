@@ -120,4 +120,193 @@ mod tests {
         assert!(env.get("GITPUBLISH_VERSION_BUMP").is_none());
         assert!(env.get("GITPUBLISH_COMMIT_COUNT").is_none());
     }
+
+    // Integration tests: hook workflows
+    #[test]
+    fn test_hook_context_all_hook_types() {
+        let branches = vec!["main", "develop", "feature"];
+        let hook_types = vec![
+            HookType::PreTagCreate,
+            HookType::PostTagCreate,
+            HookType::PostPush,
+        ];
+
+        for hook_type in hook_types {
+            for branch in &branches {
+                let ctx = HookContext {
+                    hook_type,
+                    branch: branch.to_string(),
+                    tag: "v1.0.0".to_string(),
+                    remote: "origin".to_string(),
+                    version_bump: None,
+                    commit_count: None,
+                };
+
+                let env = ctx.to_env_vars();
+                assert_eq!(env.get("GITPUBLISH_BRANCH"), Some(&branch.to_string()));
+            }
+        }
+    }
+
+    #[test]
+    fn test_hook_context_prerelease_workflow() {
+        let ctx = HookContext {
+            hook_type: HookType::PreTagCreate,
+            branch: "develop".to_string(),
+            tag: "v2.0.0-beta.1".to_string(),
+            remote: "origin".to_string(),
+            version_bump: Some("Minor".to_string()),
+            commit_count: Some(3),
+        };
+
+        let env = ctx.to_env_vars();
+        assert_eq!(
+            env.get("GITPUBLISH_TAG_NAME"),
+            Some(&"v2.0.0-beta.1".to_string())
+        );
+        assert_eq!(
+            env.get("GITPUBLISH_VERSION_BUMP"),
+            Some(&"Minor".to_string())
+        );
+    }
+
+    #[test]
+    fn test_hook_context_major_version_bump() {
+        let ctx = HookContext {
+            hook_type: HookType::PostTagCreate,
+            branch: "main".to_string(),
+            tag: "v2.0.0".to_string(),
+            remote: "origin".to_string(),
+            version_bump: Some("Major".to_string()),
+            commit_count: Some(15),
+        };
+
+        let env = ctx.to_env_vars();
+        assert_eq!(
+            env.get("GITPUBLISH_VERSION_BUMP"),
+            Some(&"Major".to_string())
+        );
+        assert_eq!(env.get("GITPUBLISH_COMMIT_COUNT"), Some(&"15".to_string()));
+    }
+
+    #[test]
+    fn test_hook_context_various_remotes() {
+        let remotes = vec!["origin", "upstream", "github", "gitlab"];
+
+        for remote in remotes {
+            let ctx = HookContext {
+                hook_type: HookType::PostPush,
+                branch: "main".to_string(),
+                tag: "v1.0.0".to_string(),
+                remote: remote.to_string(),
+                version_bump: None,
+                commit_count: None,
+            };
+
+            let env = ctx.to_env_vars();
+            assert_eq!(env.get("GITPUBLISH_REMOTE"), Some(&remote.to_string()));
+        }
+    }
+
+    #[test]
+    fn test_hook_context_env_var_formats() {
+        let ctx = HookContext {
+            hook_type: HookType::PreTagCreate,
+            branch: "main".to_string(),
+            tag: "v1.2.3".to_string(),
+            remote: "origin".to_string(),
+            version_bump: Some("Patch".to_string()),
+            commit_count: Some(1),
+        };
+
+        let env = ctx.to_env_vars();
+
+        // Verify all keys follow GITPUBLISH_ naming
+        for (key, _value) in &env {
+            assert!(
+                key.starts_with("GITPUBLISH_"),
+                "Key should start with GITPUBLISH_: {}",
+                key
+            );
+        }
+
+        // Verify all required fields are present
+        assert!(env.contains_key("GITPUBLISH_BRANCH"));
+        assert!(env.contains_key("GITPUBLISH_TAG_NAME"));
+        assert!(env.contains_key("GITPUBLISH_REMOTE"));
+    }
+
+    #[test]
+    fn test_hook_context_commit_count_display() {
+        let counts = vec![0, 1, 5, 10, 100, 1000];
+
+        for count in counts {
+            let ctx = HookContext {
+                hook_type: HookType::PostTagCreate,
+                branch: "main".to_string(),
+                tag: "v1.0.0".to_string(),
+                remote: "origin".to_string(),
+                version_bump: None,
+                commit_count: Some(count),
+            };
+
+            let env = ctx.to_env_vars();
+            assert_eq!(env.get("GITPUBLISH_COMMIT_COUNT"), Some(&count.to_string()));
+        }
+    }
+
+    #[test]
+    fn test_hook_type_all_variants() {
+        let types = vec![
+            HookType::PreTagCreate,
+            HookType::PostTagCreate,
+            HookType::PostPush,
+        ];
+
+        let names = vec!["pre-tag-create", "post-tag-create", "post-push"];
+
+        for (hook_type, expected_name) in types.iter().zip(names.iter()) {
+            assert_eq!(hook_type.name(), *expected_name);
+        }
+    }
+
+    #[test]
+    fn test_hook_context_with_special_characters_in_branch() {
+        let ctx = HookContext {
+            hook_type: HookType::PreTagCreate,
+            branch: "release/v1.0.0".to_string(),
+            tag: "v1.0.0".to_string(),
+            remote: "origin".to_string(),
+            version_bump: None,
+            commit_count: None,
+        };
+
+        let env = ctx.to_env_vars();
+        assert_eq!(
+            env.get("GITPUBLISH_BRANCH"),
+            Some(&"release/v1.0.0".to_string())
+        );
+    }
+
+    #[test]
+    fn test_hook_context_version_bump_all_types() {
+        let bump_types = vec!["Major", "Minor", "Patch"];
+
+        for bump_type in bump_types {
+            let ctx = HookContext {
+                hook_type: HookType::PostTagCreate,
+                branch: "main".to_string(),
+                tag: "v1.0.0".to_string(),
+                remote: "origin".to_string(),
+                version_bump: Some(bump_type.to_string()),
+                commit_count: None,
+            };
+
+            let env = ctx.to_env_vars();
+            assert_eq!(
+                env.get("GITPUBLISH_VERSION_BUMP"),
+                Some(&bump_type.to_string())
+            );
+        }
+    }
 }

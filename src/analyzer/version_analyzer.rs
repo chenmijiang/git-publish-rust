@@ -101,4 +101,180 @@ mod tests {
 
         assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
     }
+
+    // Integration tests: real-world commit scenarios
+    #[test]
+    fn test_analyze_single_breaking_change() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages = vec!["feat(api)!: redesign endpoint".to_string()];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Major);
+    }
+
+    #[test]
+    fn test_analyze_single_feature() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages = vec!["feat(auth): add oauth support".to_string()];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Minor);
+    }
+
+    #[test]
+    fn test_analyze_single_fix() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages = vec!["fix(ui): button styling".to_string()];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+    }
+
+    #[test]
+    fn test_analyze_mixed_commits_features_and_fixes() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages = vec![
+            "feat(api): add endpoint".to_string(),
+            "fix(ui): button color".to_string(),
+            "fix(db): connection pool".to_string(),
+        ];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Minor);
+    }
+
+    #[test]
+    fn test_analyze_multiple_fixes_no_features() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages = vec![
+            "fix: bug 1".to_string(),
+            "fix: bug 2".to_string(),
+            "perf: optimize".to_string(),
+            "refactor: cleanup".to_string(),
+        ];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+    }
+
+    #[test]
+    fn test_analyze_breaking_change_via_footer() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages =
+            vec!["fix: rename API field\n\nBREAKING CHANGE: field changed from X to Y".to_string()];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Major);
+    }
+
+    #[test]
+    fn test_analyze_priority_breaking_over_features() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages = vec![
+            "feat: new feature 1".to_string(),
+            "feat: new feature 2".to_string(),
+            "fix(core)!: breaking change".to_string(),
+        ];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Major);
+    }
+
+    #[test]
+    fn test_analyze_ignore_docs_and_chore() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages = vec![
+            "docs: update readme".to_string(),
+            "chore: update deps".to_string(),
+            "style: format code".to_string(),
+            "test: add tests".to_string(),
+        ];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+    }
+
+    #[test]
+    fn test_analyze_real_release_cycle() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        // Simulate a release cycle from v1.0.0 to v1.1.0
+        let messages = vec![
+            "feat(api): add user list endpoint".to_string(),
+            "feat(auth): add role-based access".to_string(),
+            "fix(ui): modal alignment".to_string(),
+            "docs: update api docs".to_string(),
+        ];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Minor);
+    }
+
+    #[test]
+    fn test_analyze_major_release_scenario() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        // Simulate major version bump
+        let messages = vec![
+            "feat(core)!: rewrite core engine".to_string(),
+            "feat(api)!: new response format".to_string(),
+            "feat(auth): add oauth2".to_string(),
+            "fix: various bugs".to_string(),
+        ];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Major);
+    }
+
+    #[test]
+    fn test_analyze_patch_release_scenario() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        // Simulate patch version bump (bug fixes only)
+        let messages = vec![
+            "fix(api): handle null values".to_string(),
+            "fix(db): query optimization".to_string(),
+            "perf: cache results".to_string(),
+        ];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+    }
+
+    #[test]
+    fn test_analyze_many_commits() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages = vec![
+            "chore: bump deps".to_string(),
+            "docs: add faq".to_string(),
+            "style: format code".to_string(),
+            "test: add unit tests".to_string(),
+            "test: add e2e tests".to_string(),
+            "refactor: extract module".to_string(),
+            "fix: edge case handling".to_string(),
+            "feat: new search feature".to_string(),
+        ];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Minor);
+    }
+
+    #[test]
+    fn test_analyze_empty_message() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages = vec!["".to_string()];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+    }
+
+    #[test]
+    fn test_analyze_non_conventional_commits() {
+        let config = ConventionalCommitsConfig::default();
+        let analyzer = VersionAnalyzer::new(config);
+
+        let messages = vec![
+            "Updated stuff".to_string(),
+            "Fixed things".to_string(),
+            "Added more stuff".to_string(),
+        ];
+        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+    }
 }

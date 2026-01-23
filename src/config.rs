@@ -235,3 +235,269 @@ pub fn load_config(config_path: Option<&str>) -> Result<Config, Box<dyn std::err
     let config: Config = toml::from_str(&config_str)?;
     Ok(config)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Integration tests: configuration scenarios
+    #[test]
+    fn test_config_default() {
+        let config = Config::default();
+
+        assert!(config.branches.contains_key("main"));
+        assert!(config.branches.contains_key("develop"));
+        assert_eq!(config.branches.get("main"), Some(&"v{version}".to_string()));
+    }
+
+    #[test]
+    fn test_config_conventional_commits_defaults() {
+        let config = ConventionalCommitsConfig::default();
+
+        assert!(config.types.contains(&"feat".to_string()));
+        assert!(config.types.contains(&"fix".to_string()));
+        assert!(config.types.contains(&"docs".to_string()));
+        assert_eq!(config.types.len(), 10);
+    }
+
+    #[test]
+    fn test_config_breaking_change_indicators() {
+        let config = ConventionalCommitsConfig::default();
+
+        assert!(config
+            .breaking_change_indicators
+            .contains(&"BREAKING CHANGE:".to_string()));
+        assert!(config
+            .breaking_change_indicators
+            .contains(&"BREAKING-CHANGE:".to_string()));
+    }
+
+    #[test]
+    fn test_config_major_keywords() {
+        let config = ConventionalCommitsConfig::default();
+
+        assert!(config.major_keywords.contains(&"breaking".to_string()));
+        assert!(config.major_keywords.contains(&"deprecate".to_string()));
+    }
+
+    #[test]
+    fn test_config_minor_keywords() {
+        let config = ConventionalCommitsConfig::default();
+
+        assert!(config.minor_keywords.contains(&"feat".to_string()));
+        assert!(config.minor_keywords.contains(&"feature".to_string()));
+        assert!(config.minor_keywords.contains(&"enhancement".to_string()));
+    }
+
+    #[test]
+    fn test_config_patterns_default() {
+        let config = PatternsConfig::default();
+
+        assert!(config.version_format.contains_key("major"));
+        assert!(config.version_format.contains_key("minor"));
+        assert!(config.version_format.contains_key("patch"));
+    }
+
+    #[test]
+    fn test_config_behavior_default() {
+        let config = BehaviorConfig::default();
+
+        assert!(!config.skip_remote_selection);
+    }
+
+    #[test]
+    fn test_config_prerelease_default_disabled() {
+        let config = PreReleaseConfig::default();
+
+        assert!(!config.enabled);
+        assert_eq!(config.default_identifier, "alpha");
+        assert!(config.auto_increment);
+    }
+
+    #[test]
+    fn test_config_hooks_default_empty() {
+        let config = HooksConfig::default();
+
+        assert!(config.pre_tag_create.is_none());
+        assert!(config.post_tag_create.is_none());
+        assert!(config.post_push.is_none());
+    }
+
+    #[test]
+    fn test_config_full_default_structure() {
+        let config = Config::default();
+
+        // Verify all sections exist and are initialized
+        assert!(!config.branches.is_empty());
+        assert!(!config.conventional_commits.types.is_empty());
+        assert!(!config.patterns.version_format.is_empty());
+        assert!(!config.prerelease.enabled); // disabled by default
+        assert!(config.hooks.pre_tag_create.is_none());
+    }
+
+    #[test]
+    fn test_config_toml_parsing_simple() {
+        let toml_str = r#"
+[branches]
+main = "v{version}"
+develop = "d{version}"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+
+        assert_eq!(config.branches.get("main"), Some(&"v{version}".to_string()));
+        assert_eq!(
+            config.branches.get("develop"),
+            Some(&"d{version}".to_string())
+        );
+    }
+
+    #[test]
+    fn test_config_toml_parsing_with_prerelease() {
+        let toml_str = r#"
+[prerelease]
+enabled = true
+default_identifier = "beta"
+auto_increment = true
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+
+        assert!(config.prerelease.enabled);
+        assert_eq!(config.prerelease.default_identifier, "beta");
+        assert!(config.prerelease.auto_increment);
+    }
+
+    #[test]
+    fn test_config_toml_parsing_with_hooks() {
+        let toml_str = r#"
+[hooks]
+pre_tag_create = "./scripts/pre-tag-create.sh"
+post_tag_create = "./scripts/post-tag-create.sh"
+post_push = "./scripts/post-push.sh"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+
+        assert_eq!(
+            config.hooks.pre_tag_create,
+            Some("./scripts/pre-tag-create.sh".to_string())
+        );
+        assert_eq!(
+            config.hooks.post_tag_create,
+            Some("./scripts/post-tag-create.sh".to_string())
+        );
+        assert_eq!(
+            config.hooks.post_push,
+            Some("./scripts/post-push.sh".to_string())
+        );
+    }
+
+    #[test]
+    fn test_config_toml_parsing_complete() {
+        let toml_str = r#"
+[branches]
+main = "v{version}"
+develop = "d{version}"
+staging = "s{version}"
+
+[conventional_commits]
+types = ["feat", "fix", "docs"]
+
+[behavior]
+skip_remote_selection = true
+
+[prerelease]
+enabled = true
+default_identifier = "rc"
+auto_increment = false
+
+[hooks]
+pre_tag_create = "./hooks/pre.sh"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+
+        // Verify branches
+        assert_eq!(config.branches.len(), 3);
+        assert_eq!(
+            config.branches.get("staging"),
+            Some(&"s{version}".to_string())
+        );
+
+        // Verify conventional commits
+        assert_eq!(config.conventional_commits.types.len(), 3);
+
+        // Verify behavior
+        assert!(config.behavior.skip_remote_selection);
+
+        // Verify prerelease
+        assert!(config.prerelease.enabled);
+        assert_eq!(config.prerelease.default_identifier, "rc");
+        assert!(!config.prerelease.auto_increment);
+
+        // Verify hooks
+        assert_eq!(
+            config.hooks.pre_tag_create,
+            Some("./hooks/pre.sh".to_string())
+        );
+    }
+
+    #[test]
+    fn test_config_serialization_roundtrip() {
+        let original = Config::default();
+
+        // Serialize to TOML
+        let toml_str = toml::to_string(&original).unwrap();
+
+        // Deserialize back
+        let restored: Config = toml::from_str(&toml_str).unwrap();
+
+        // Verify key values match
+        assert_eq!(original.branches, restored.branches);
+        assert_eq!(original.prerelease.enabled, restored.prerelease.enabled);
+    }
+
+    #[test]
+    fn test_conventional_commits_config_clone() {
+        let config1 = ConventionalCommitsConfig::default();
+        let config2 = config1.clone();
+
+        assert_eq!(config1.types, config2.types);
+        assert_eq!(
+            config1.breaking_change_indicators,
+            config2.breaking_change_indicators
+        );
+    }
+
+    #[test]
+    fn test_prerelease_config_equality() {
+        let pr1 = PreReleaseConfig {
+            enabled: true,
+            default_identifier: "beta".to_string(),
+            auto_increment: true,
+        };
+
+        let pr2 = PreReleaseConfig {
+            enabled: true,
+            default_identifier: "beta".to_string(),
+            auto_increment: true,
+        };
+
+        assert_eq!(pr1, pr2);
+    }
+
+    #[test]
+    fn test_config_multiple_branch_patterns() {
+        let toml_str = r#"
+[branches]
+main = "v{version}"
+develop = "d{version}"
+staging = "staging-{version}"
+release = "release/{version}"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+
+        assert_eq!(config.branches.len(), 4);
+        assert_eq!(
+            config.branches.get("release"),
+            Some(&"release/{version}".to_string())
+        );
+    }
+}
