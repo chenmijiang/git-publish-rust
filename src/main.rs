@@ -2,6 +2,8 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 use boundary::BoundaryWarning;
+#[allow(unused_imports)]
+use cli::orchestration::PublishWorkflowArgs;
 
 mod boundary;
 mod cli;
@@ -64,6 +66,26 @@ fn main() -> Result<()> {
             std::process::exit(1);
         }
     };
+
+    // NOTE: Task 6 will replace the logic below with:
+    // let workflow_args = PublishWorkflowArgs {
+    //     config_path: args.config.clone(),
+    //     branch: args.branch.clone(),
+    //     remote: args.remote.clone(),
+    //     force: args.force,
+    //     dry_run: args.dry_run,
+    // };
+    // match cli::orchestration::run_publish_workflow(workflow_args, config) {
+    //     Ok(result) => {
+    //         println!("✓ Successfully published tag {} for branch {}", result.tag, result.branch);
+    //     }
+    //     Err(e) => {
+    //         eprintln!("Error: {}", e);
+    //         std::process::exit(1);
+    //     }
+    // }
+
+    // CURRENT: Keep existing logic for backward compatibility during Task 5 migration
 
     // Select branch to tag
     let branch_to_tag = if let Some(branch) = args.branch {
