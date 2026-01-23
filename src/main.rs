@@ -318,9 +318,9 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Create the tag
+    // Create the tag on the target branch (not on current HEAD)
     ui::display_status(&format!("Creating tag: {}", final_tag));
-    if let Err(e) = git_repo.create_tag(&final_tag) {
+    if let Err(e) = git_repo.create_tag(&final_tag, Some(&branch_to_tag)) {
         ui::display_error(&format!("Failed to create tag '{}': {}", final_tag, e));
         std::process::exit(1);
     }

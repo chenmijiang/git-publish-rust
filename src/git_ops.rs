@@ -438,18 +438,29 @@ impl GitRepo {
         Ok(oid.to_string())
     }
 
-    /// Creates a lightweight tag on the current HEAD commit.
+    /// Creates a lightweight tag on a specific branch's head commit.
+    ///
+    /// If a branch name is provided, the tag is created on that branch's head commit.
+    /// If no branch name is provided, falls back to tagging the current HEAD.
     ///
     /// # Arguments
     /// * `tag_name` - Name of the tag to create
+    /// * `branch_name` - Optional name of the branch to tag; if not provided, uses current HEAD
     ///
     /// # Returns
     /// * `Ok(())` - Tag created successfully
     /// * `Err` - If tag creation fails
-    pub fn create_tag(&self, tag_name: &str) -> Result<()> {
-        let head = self.repo.head()?.peel_to_commit()?;
-        self.repo
-            .tag_lightweight(tag_name, head.as_object(), false)?;
+    pub fn create_tag(&self, tag_name: &str, branch_name: Option<&str>) -> Result<()> {
+        let target_oid = if let Some(branch) = branch_name {
+            // Tag the specific branch's head
+            self.get_branch_head_oid(branch)?
+        } else {
+            // Fall back to tagging current HEAD
+            self.repo.head()?.peel_to_commit()?.id()
+        };
+
+        let target_object = self.repo.find_object(target_oid, None)?;
+        self.repo.tag_lightweight(tag_name, &target_object, false)?;
         Ok(())
     }
 

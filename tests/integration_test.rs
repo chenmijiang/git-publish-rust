@@ -591,6 +591,143 @@ mod git_operations_tests {
             "Should find the most recent tag v1.1.0"
         );
     }
+
+    #[test]
+    #[serial]
+    fn test_create_tag_on_specific_branch() {
+        // Scenario: User is on develop branch but wants to tag master branch.
+        // The tag should be created on the master branch commit, not on the current HEAD (develop).
+        let temp_dir = TempDir::new().expect("Could not create temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("Could not init git repo");
+
+        // Configure git user
+        {
+            let mut config = repo.config().expect("Could not get config");
+            config
+                .set_str("user.name", "Test User")
+                .expect("Could not set user.name");
+            config
+                .set_str("user.email", "test@example.com")
+                .expect("Could not set user.email");
+        }
+
+        let sig = repo.signature().expect("Could not get sig");
+
+        // Create initial commit on master (default branch)
+        let content = b"Master branch content\n";
+        let content_path = temp_dir.path().join("master.txt");
+        fs::write(&content_path, content).expect("Could not write file");
+
+        let mut index = repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("master.txt"))
+            .expect("Could not add file");
+        index.write().expect("Could not write index");
+
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = repo.find_tree(tree_id).expect("Could not find tree");
+
+        let master_commit = repo
+            .commit(Some("HEAD"), &sig, &sig, "Commit on master", &tree, &[])
+            .expect("Could not create commit");
+
+        // Create develop branch from master commit
+        let master_obj = repo.find_object(master_commit, None).unwrap();
+        let master_commit_obj = master_obj.peel_to_commit().unwrap();
+        repo.branch("develop", &master_commit_obj, false)
+            .expect("Could not create develop branch");
+
+        // Switch to develop branch
+        let develop_branch = repo
+            .find_branch("develop", git2::BranchType::Local)
+            .unwrap();
+        let develop_ref = develop_branch.into_reference();
+        repo.set_head(develop_ref.name().unwrap())
+            .expect("Could not switch to develop");
+
+        // Now create a commit on develop to move it ahead
+        let dev_content = b"Develop branch content\n";
+        let dev_path = temp_dir.path().join("develop.txt");
+        fs::write(&dev_path, dev_content).expect("Could not write dev file");
+
+        let mut index = repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("develop.txt"))
+            .expect("Could not add develop file");
+        index.write().expect("Could not write index");
+
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = repo.find_tree(tree_id).expect("Could not find tree");
+        let parent = repo.head().unwrap().peel_to_commit().unwrap();
+
+        repo.commit(
+            Some("HEAD"),
+            &sig,
+            &sig,
+            "Commit on develop",
+            &tree,
+            &[&parent],
+        )
+        .expect("Could not create develop commit");
+
+        // Now we're on develop, but we want to tag the master branch
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).expect("Could not change to temp dir");
+
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Could not create GitRepo");
+
+        // Get the master branch head OID - this is what we want to tag
+        let master_head_oid = git_repo
+            .get_branch_head_oid("master")
+            .expect("Should get master branch head OID");
+
+        // Get the develop branch head OID - this is the current HEAD
+        let develop_head_oid = git_repo
+            .get_branch_head_oid("develop")
+            .expect("Should get develop branch head OID");
+
+        // Verify they're different (develop is ahead of master)
+        assert_ne!(
+            master_head_oid, develop_head_oid,
+            "master and develop should have different commits"
+        );
+
+        // Get current HEAD
+        let current_head_oid = git_repo
+            .get_current_head_hash()
+            .expect("Should get current HEAD")
+            .parse::<git2::Oid>()
+            .expect("Should parse OID");
+
+        // Verify we're currently on develop (HEAD == develop_head)
+        assert_eq!(
+            current_head_oid, develop_head_oid,
+            "Current HEAD should be on develop branch"
+        );
+
+        // Create a tag on the master branch (not on current HEAD which is develop)
+        // After the fix, this should create the tag on master's commit, not develop's
+        git_repo
+            .create_tag("v1.0.0", Some("master"))
+            .expect("Should create tag on master");
+
+        // Verify where the tag points to
+        let tag_ref = repo
+            .find_reference("refs/tags/v1.0.0")
+            .expect("Should find tag");
+        let tag_oid = tag_ref
+            .peel(git2::ObjectType::Any)
+            .expect("Should peel tag")
+            .id();
+
+        env::set_current_dir(original_dir).unwrap();
+
+        // FIXED: The tag should now point to master, not develop (current HEAD)
+        assert_eq!(
+            tag_oid, master_head_oid,
+            "Tag should point to master branch when tagging master"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -887,8 +1024,10 @@ mod remote_selection_tests {
         // Test that push_tag accepts remote_name parameter
         let git_repo = git_publish::git_ops::GitRepo::new().expect("Failed to create GitRepo");
 
-        // Create a test tag
-        git_repo.create_tag("v1.0.0").expect("Failed to create tag");
+        // Create a test tag (on current HEAD, so pass None)
+        git_repo
+            .create_tag("v1.0.0", None)
+            .expect("Failed to create tag");
 
         // Test that push_tag can be called with remote parameter
         // It will fail because we don't have a real remote, but that's OK
