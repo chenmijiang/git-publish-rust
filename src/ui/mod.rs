@@ -1,55 +1,33 @@
-use anyhow::Result;
+//! User interface module - interaction (prompts) and formatting.
+//!
+//! Separates concerns:
+//! - `formatter` - Pure formatting functions
+//! - This module - Interactive prompts and user input handling
+
 use std::io::{self, Write};
 
-use crate::boundary::BoundaryWarning;
+use anyhow::Result;
 
-pub fn display_error(message: &str) {
-    eprintln!("\x1b[31mERROR:\x1b[0m {}", message); // Red color
-}
+pub mod formatter;
 
-pub fn display_success(message: &str) {
-    println!("\x1b[32m✓\x1b[0m {}", message); // Green color
-}
+// Re-export formatter functions for convenience
+pub use formatter::{
+    display_available_branches, display_boundary_warning, display_commit_analysis, display_error,
+    display_manual_push_instruction, display_proposed_tag, display_status, display_success,
+};
 
-pub fn display_status(message: &str) {
-    println!("\x1b[33m→\x1b[0m {}", message); // Yellow color
-}
-
-pub fn display_commit_analysis(commit_messages: &[String], branch_name: &str) {
-    println!(
-        "\n\x1b[1mAnalyzing commits on branch '{}'\x1b[0m",
-        branch_name
-    );
-    println!("\x1b[4mLast {} commits:\x1b[0m", commit_messages.len());
-
-    for (i, message) in commit_messages.iter().take(10).enumerate() {
-        let short_msg = if message.len() > 60 {
-            &message[..60]
-        } else {
-            message
-        };
-        println!("  {}. {}", i + 1, short_msg);
-    }
-
-    if commit_messages.len() > 10 {
-        println!("  ... and {} more commits", commit_messages.len() - 10);
-    }
-}
-
-pub fn display_proposed_tag(old_tag: Option<&str>, new_tag: &str) {
-    match old_tag {
-        Some(old) => {
-            println!("\n\x1b[1mProposed Tag Change:\x1b[0m");
-            println!("  From: \x1b[31m{}\x1b[0m", old);
-            println!("  To:   \x1b[32m{}\x1b[0m", new_tag);
-        }
-        None => {
-            println!("\n\x1b[1mInitial Tag:\x1b[0m");
-            println!("  New tag: \x1b[32m{}\x1b[0m", new_tag);
-        }
-    }
-}
-
+/// Prompts user to select a branch from available options.
+///
+/// If only one branch is available, returns it directly without prompting.
+/// Otherwise displays numbered list and accepts 1-based index selection.
+/// Default selection is the first branch (index 1) if user presses Enter.
+///
+/// # Arguments
+/// * `available_branches` - List of branch names to choose from
+///
+/// # Returns
+/// * `Ok(String)` - The selected branch name
+/// * `Err` - If selection is invalid
 pub fn select_branch(available_branches: &[String]) -> Result<String> {
     if available_branches.len() == 1 {
         return Ok(available_branches[0].clone());
@@ -64,10 +42,10 @@ pub fn select_branch(available_branches: &[String]) -> Result<String> {
         "\nSelect a branch (1-{}) [default: 1]: ",
         available_branches.len()
     );
-    std::io::stdout().flush().unwrap(); // Need to import std::io::Write
+    io::stdout().flush()?;
 
     let mut input = String::new();
-    std::io::stdin().read_line(&mut input)?;
+    io::stdin().read_line(&mut input)?;
     let selection = input.trim();
 
     // If empty input, default to first branch (index 1)
@@ -84,13 +62,13 @@ pub fn select_branch(available_branches: &[String]) -> Result<String> {
     }
 }
 
-/// Allows user to select a remote for fetch/push operations.
+/// Prompts user to select a remote for fetch/push operations.
 ///
 /// If only one remote exists, returns it directly without prompting.
-/// Displays all available remotes and allows selection, with "origin" as default.
+/// Displays all available remotes and allows selection, with first remote as default.
 ///
 /// # Arguments
-/// * `available_remotes` - List of remote names (should be pre-sorted with "origin" first if available)
+/// * `available_remotes` - List of remote names (preferably sorted with "origin" first)
 ///
 /// # Returns
 /// * `Ok(String)` - The selected remote name
@@ -129,6 +107,18 @@ pub fn select_remote(available_remotes: &[String]) -> Result<String> {
     }
 }
 
+/// Prompts user to confirm an action with a yes/no prompt.
+///
+/// Displays the given prompt and accepts "y" or "yes" (case-insensitive) as confirmation.
+/// Default is "no" if user presses Enter.
+///
+/// # Arguments
+/// * `prompt` - The prompt message to display (without the "(y/N): " suffix)
+///
+/// # Returns
+/// * `Ok(true)` - If user entered "y" or "yes"
+/// * `Ok(false)` - Otherwise (including Enter, or "n"/"no")
+/// * `Err` - If input error occurs
 pub fn confirm_action(prompt: &str) -> Result<bool> {
     print!("\n{} (y/N): ", prompt);
     io::stdout().flush()?;
@@ -140,36 +130,27 @@ pub fn confirm_action(prompt: &str) -> Result<bool> {
     Ok(response == "y" || response == "yes")
 }
 
-pub fn display_available_branches(branches: &[String]) {
-    println!("\x1b[1mConfigured branches:\x1b[0m");
-    for branch in branches {
-        println!("  - {}", branch);
-    }
-}
-
 /// Validates that a tag matches the configured pattern.
+///
+/// Checks if the tag conforms to the pattern (e.g., "v{version}" -> "v1.2.3").
+/// If pattern has no {version} placeholder, any tag is valid.
+/// Validates that the version part contains only digits and dots.
 ///
 /// # Arguments
 /// * `tag` - The tag to validate (e.g., "v1.2.3")
 /// * `pattern` - The pattern template (e.g., "v{version}" or "release-v{version}-final")
 ///
 /// # Returns
-/// * `Ok(())` if the tag matches the pattern or pattern has no {version} constraint
-/// * `Err(anyhow::Error)` if the tag doesn't match the pattern
+/// * `Ok(())` - If the tag matches the pattern
+/// * `Err(anyhow::Error)` - If the tag doesn't match or pattern is invalid
 ///
 /// # Examples
 ///
 /// ```ignore
-/// // Simple pattern with version
-/// validate_tag_format("v1.2.3", "v{version}") // Ok
-/// validate_tag_format("1.2.3", "v{version}")   // Err - missing prefix
-///
-/// // Pattern with suffix
-/// validate_tag_format("v1.2.3-release", "v{version}-release") // Ok
-/// validate_tag_format("v1.2.3", "v{version}-release")         // Err - missing suffix
-///
-/// // Pattern without {version} constraint
-/// validate_tag_format("anything", "free-form") // Ok
+/// validate_tag_format("v1.2.3", "v{version}")                   // Ok
+/// validate_tag_format("1.2.3", "v{version}")                    // Err - missing prefix
+/// validate_tag_format("v1.2.3-release", "v{version}-release")   // Ok
+/// validate_tag_format("anything", "free-form")                  // Ok (no {version})
 /// ```
 #[allow(dead_code)]
 pub fn validate_tag_format(tag: &str, pattern: &str) -> Result<()> {
@@ -225,34 +206,27 @@ pub fn validate_tag_format(tag: &str, pattern: &str) -> Result<()> {
     Ok(())
 }
 
-/// Display a boundary warning to the user.
-///
-/// # Arguments
-/// * `warning` - The boundary warning to display
-pub fn display_boundary_warning(warning: &BoundaryWarning) {
-    eprintln!("\x1b[33m⚠ WARNING:\x1b[0m {}", warning);
-}
-
-/// Allows user to select or customize a tag.
+/// Prompts user to select or customize a tag.
 ///
 /// Provides three options:
 /// 1. Press Enter to use the recommended tag
 /// 2. Enter a custom tag
-/// 3. Enter 'e' to edit the recommended value
+/// 3. Enter 'e' to edit the recommended tag
 ///
 /// # Arguments
 /// * `recommended_tag` - The default recommended tag
-/// * `_pattern` - The tag pattern for validation (e.g., "v{version}")
+/// * `_pattern` - The tag pattern for validation (currently unused but kept for API compatibility)
 ///
 /// # Returns
 /// * `Ok(String)` - The selected or customized tag
-/// * `Err` - If user cancels or enters invalid input
+/// * `Err` - If input error occurs
 ///
 /// # Examples
 /// ```ignore
 /// let tag = select_or_customize_tag("v1.2.3", "v{version}")?;
-/// // Returns "v1.2.3" (if user presses Enter)
-/// // or custom tag if user enters one
+/// // Returns "v1.2.3" if user presses Enter
+/// // Returns custom tag if user enters one
+/// // Returns edited tag if user enters 'e'
 /// ```
 pub fn select_or_customize_tag(recommended_tag: &str, _pattern: &str) -> Result<String> {
     print!(
@@ -282,20 +256,21 @@ pub fn select_or_customize_tag(recommended_tag: &str, _pattern: &str) -> Result<
 /// Confirms tag use with format validation.
 ///
 /// Validates that the tag matches the configured pattern, then asks for confirmation.
+/// Default is to confirm (user must enter 'n' or 'no' to decline).
 ///
 /// # Arguments
 /// * `tag` - The tag to validate and confirm
 /// * `pattern` - The tag pattern to validate against
 ///
 /// # Returns
-/// * `Ok(true)` - If user confirms after successful validation
-/// * `Ok(false)` - If user declines
+/// * `Ok(true)` - If user confirms after successful validation (or presses Enter)
+/// * `Ok(false)` - If user enters 'n' or 'no'
 /// * `Err` - If validation fails or input error occurs
 ///
 /// # Examples
 /// ```ignore
 /// if confirm_tag_use("v1.2.3", "v{version}")? {
-///     // Proceed with tag
+///     // Proceed with tag creation
 /// }
 /// ```
 pub fn confirm_tag_use(tag: &str, pattern: &str) -> Result<bool> {
@@ -315,21 +290,24 @@ pub fn confirm_tag_use(tag: &str, pattern: &str) -> Result<bool> {
     Ok(!(response == "n" || response == "no"))
 }
 
-/// Confirms whether to push a locally created tag to a remote.
+/// Prompts user to confirm pushing a locally created tag to a remote.
+///
+/// Asks if the user wants to push the tag to the specified remote.
+/// Default is not to push (user must enter "y" or "yes" to confirm).
 ///
 /// # Arguments
 /// * `tag` - The tag that was created locally
 /// * `remote` - The remote name (e.g., "origin")
 ///
 /// # Returns
-/// * `Ok(true)` - If user confirms to push
-/// * `Ok(false)` - If user declines to push
+/// * `Ok(true)` - If user enters "y" or "yes"
+/// * `Ok(false)` - Otherwise (including Enter or "n"/"no")
 /// * `Err` - If input error occurs
 ///
 /// # Examples
 /// ```ignore
 /// if confirm_push_tag("v1.2.3", "origin")? {
-///     // Push the tag
+///     // Push the tag to remote
 /// }
 /// ```
 pub fn confirm_push_tag(tag: &str, remote: &str) -> Result<bool> {
@@ -346,20 +324,40 @@ pub fn confirm_push_tag(tag: &str, remote: &str) -> Result<bool> {
     Ok(response == "y" || response == "yes")
 }
 
-/// Displays instructions for manually pushing a tag to remote.
-///
-/// # Arguments
-/// * `tag` - The tag that was created locally
-/// * `remote` - The remote name (e.g., "origin")
-///
-/// # Examples
-/// ```ignore
-/// display_manual_push_instruction("v1.2.3", "origin");
-/// // Prints: To push manually, run: git push origin v1.2.3
-/// ```
-pub fn display_manual_push_instruction(tag: &str, remote: &str) {
-    println!(
-        "\n\x1b[33m→\x1b[0m To push this tag later, run:\n  \x1b[36mgit push {} {}\x1b[0m",
-        remote, tag
-    );
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_tag_format_simple() {
+        assert!(validate_tag_format("v1.2.3", "v{version}").is_ok());
+    }
+
+    #[test]
+    fn test_validate_tag_format_no_constraint() {
+        assert!(validate_tag_format("anything", "free-form").is_ok());
+    }
+
+    #[test]
+    fn test_validate_tag_format_with_suffix() {
+        assert!(validate_tag_format("v1.2.3-release", "v{version}-release").is_ok());
+    }
+
+    #[test]
+    fn test_validate_tag_format_missing_prefix() {
+        let result = validate_tag_format("1.2.3", "v{version}");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_tag_format_missing_suffix() {
+        let result = validate_tag_format("v1.2.3", "v{version}-release");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_tag_format_invalid_version() {
+        let result = validate_tag_format("v1.2.3abc", "v{version}");
+        assert!(result.is_err());
+    }
 }
