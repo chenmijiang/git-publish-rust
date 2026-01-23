@@ -105,6 +105,63 @@ pub fn initialize_git_repo() -> Result<()> {
     Ok(())
 }
 
+/// Select which remote to use for fetch and push
+///
+/// Implements three-tier precedence:
+/// 1. CLI flag (--remote) - takes absolute precedence if provided
+/// 2. Config option (skip_remote_selection) - applies only to single-remote case
+/// 3. Error for multiple remotes (UI will handle interactive selection in Task 6)
+///
+/// # Arguments
+///
+/// * `specified_remote` - Remote name from CLI args (if provided)
+/// * `available_remotes` - List of remotes from git repo
+/// * `config` - Git publish configuration
+///
+/// # Returns
+///
+/// Selected remote name or error
+#[allow(dead_code)]
+pub fn select_remote_for_workflow(
+    specified_remote: Option<String>,
+    available_remotes: &[String],
+    config: &Config,
+) -> Result<String> {
+    // 1. CLI flag takes absolute precedence
+    if let Some(remote) = specified_remote {
+        if !available_remotes.contains(&remote) {
+            return Err(anyhow!(
+                "Remote '{}' not found. Available remotes: {}",
+                remote,
+                available_remotes.join(", ")
+            ));
+        }
+        return Ok(remote);
+    }
+
+    // Check we have at least one remote
+    if available_remotes.is_empty() {
+        return Err(anyhow!("No remotes configured in this repository"));
+    }
+
+    // Single remote case
+    if available_remotes.len() == 1 {
+        let should_skip = config.behavior.skip_remote_selection;
+        if should_skip {
+            // Auto-select the single remote
+            return Ok(available_remotes[0].clone());
+        }
+        // If skip_remote_selection is false, fall through to error
+        // (UI will handle interactive selection)
+    }
+
+    // Multiple remotes or single remote without auto-skip
+    // Return error - interactive selection will be done by UI in Task 6
+    Err(anyhow!(
+        "Multiple remotes or interactive selection required - not yet implemented in orchestration"
+    ))
+}
+
 /// Main publish workflow
 ///
 /// Orchestrates the entire tagging process:

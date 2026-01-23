@@ -126,3 +126,49 @@ fn test_git_repo_initialization() {
     // Should succeed when called from within a git repo
     assert!(result.is_ok(), "Should initialize git repo successfully");
 }
+
+#[test]
+fn test_remote_selection_with_explicit_remote() {
+    // When remote is specified, should validate and return it
+    let config = git_publish::config::Config::default();
+
+    let result = git_publish::cli::orchestration::select_remote_for_workflow(
+        Some("origin".to_string()),
+        &vec!["origin".to_string(), "upstream".to_string()],
+        &config,
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "origin".to_string());
+}
+
+#[test]
+fn test_remote_selection_validates_remote_exists() {
+    // When specified remote doesn't exist, should error
+    let config = git_publish::config::Config::default();
+
+    let result = git_publish::cli::orchestration::select_remote_for_workflow(
+        Some("nonexistent".to_string()),
+        &vec!["origin".to_string()],
+        &config,
+    );
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not found"));
+}
+
+#[test]
+fn test_remote_selection_single_remote_auto_select() {
+    // Single remote with skip_remote_selection=true should auto-select
+    let mut config = git_publish::config::Config::default();
+    config.behavior.skip_remote_selection = true;
+
+    let result = git_publish::cli::orchestration::select_remote_for_workflow(
+        None,
+        &vec!["origin".to_string()],
+        &config,
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "origin".to_string());
+}
