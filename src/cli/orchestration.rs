@@ -4,7 +4,9 @@
 //! embedded in main.rs. It provides a clean separation between CLI argument
 //! parsing and business logic.
 
-use anyhow::Result;
+use std::collections::HashMap;
+
+use anyhow::{anyhow, Result};
 
 use crate::config::Config;
 
@@ -44,6 +46,47 @@ pub struct WorkflowResult {
 
     /// Whether the tag was pushed to remote
     pub pushed: bool,
+}
+
+/// Select which branch to tag for the workflow
+///
+/// # Arguments
+///
+/// * `specified_branch` - Branch name from CLI args (if provided)
+/// * `configured_branches` - Map of configured branches from config
+///
+/// # Returns
+///
+/// The selected branch name or error if invalid
+#[allow(dead_code)]
+pub fn select_branch_for_workflow(
+    specified_branch: Option<String>,
+    configured_branches: &HashMap<String, String>,
+) -> Result<String> {
+    if let Some(branch) = specified_branch {
+        // Validate the specified branch is in config
+        if !configured_branches.contains_key(&branch) {
+            return Err(anyhow!("Branch '{}' is not configured for tagging", branch));
+        }
+        Ok(branch)
+    } else if configured_branches.is_empty() {
+        Err(anyhow!(
+            "No branches configured for tagging in gitpublish.toml"
+        ))
+    } else if configured_branches.len() == 1 {
+        // Single branch - auto-select
+        Ok(configured_branches
+            .keys()
+            .next()
+            .cloned()
+            .expect("just verified one exists"))
+    } else {
+        // Multiple branches - would need UI interaction
+        // For now, return error; UI will handle interactive selection
+        Err(anyhow!(
+            "Multiple branches configured - interactive selection not yet implemented in orchestration"
+        ))
+    }
 }
 
 /// Main publish workflow

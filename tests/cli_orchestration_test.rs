@@ -1,4 +1,5 @@
 use git_publish::cli::orchestration::{PublishWorkflowArgs, WorkflowResult};
+use std::collections::HashMap;
 
 #[test]
 fn test_orchestration_module_exports() {
@@ -87,4 +88,31 @@ fn test_workflow_result_not_pushed() {
 
     assert_eq!(result.tag, "v2.0.0");
     assert_eq!(result.pushed, false);
+}
+
+#[test]
+fn test_branch_selection_with_explicit_branch() {
+    // When branch is specified in args, it should be returned
+    let result = git_publish::cli::orchestration::select_branch_for_workflow(
+        Some("main".to_string()),
+        &HashMap::from([
+            ("main".to_string(), "v{version}".to_string()),
+            ("develop".to_string(), "release-{version}".to_string()),
+        ]),
+    );
+
+    assert!(result.is_ok());
+    assert_eq!(result.unwrap(), "main".to_string());
+}
+
+#[test]
+fn test_branch_selection_validation() {
+    // When branch is specified but not in config, should error
+    let result = git_publish::cli::orchestration::select_branch_for_workflow(
+        Some("invalid".to_string()),
+        &HashMap::from([("main".to_string(), "v{version}".to_string())]),
+    );
+
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not configured"));
 }
