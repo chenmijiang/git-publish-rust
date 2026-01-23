@@ -2,24 +2,25 @@
 
 ## 项目概览
 
-**git-publish** 是一个 Rust CLI 工具，用于基于 Conventional Commits 分析自动创建和推送 Git 标签，支持语义化版本管理。
+**git-publish** 是一个 Rust CLI 工具。它根据 Conventional Commits 规范自动创建和推送 Git 标签，支持语义化版本管理。
 
-- **核心功能**: 自动化 Git 标签发布，基于 Conventional Commits 规范
-- **技术栈**: Rust 2021, clap (CLI), serde (TOML), git2 (Git操作), regex (模式匹配)
+- **核心功能**: 自动 Git 标签发布
+- **技术栈**: Rust 2021, clap (CLI), serde (TOML), git2, regex
+- **最后更新**: 2026 年 1 月 23 日
 
 ---
 
 ## 1. 模块结构与功能
 
-| 模块 | 主要功能 |
-|------|--------|
-| **src/main.rs** | CLI 入口点，协调整个工作流程 |
-| **src/git_ops.rs** | Git 操作核心（标签、commit、fetch、push、remote selection） |
-| **src/ui.rs** | 用户交互（提示、确认、输出格式化） |
-| **src/conventional.rs** | Conventional Commit 解析和版本计算 |
-| **src/config.rs** | 配置加载和管理 |
-| **src/version.rs** | 语义版本处理（解析、递增） |
-| **src/boundary.rs** | 边界情况警告处理 |
+| 模块 | 主要功能 | 行数 |
+|------|--------|------|
+| **src/main.rs** | CLI 入口点，协调整个工作流程 | ~380 |
+| **src/git_ops.rs** | Git 操作核心（标签、commit、fetch、push、remote selection） | ~469 |
+| **src/ui.rs** | 用户交互（提示、确认、输出格式化） | ~308 |
+| **src/analyzer/** | 版本分析器（commit 解析、版本决策） | ~200 |
+| **src/config.rs** | 配置加载和管理 | ~350 |
+| **src/domain/** | 核心数据结构（Version, Tag, PreRelease） | ~300 |
+| **src/boundary.rs** | 边界情况警告处理 | ~54 |
 
 ---
 
@@ -40,11 +41,11 @@ git_repo.get_latest_tag_on_branch() ────→ 查找当前最新标签
     ↓
 git_repo.get_commits_since_tag() ────→ 获取新增 commits
     ↓
-conventional::determine_version_bump() ────→ 分析 commit 类型
+analyzer::determine_version_bump() ────→ 分析 commit 类型
     ↓
-version::parse_version_from_tag() ────→ 解析当前版本号
+domain::Version::parse_from_tag() ────→ 解析当前版本号
     ↓
-version::bump_version() ────→ 计算新版本号
+domain::Version::bump() ────→ 计算新版本号
     ↓
 git_repo.create_tag() ────→ 本地创建标签
     ↓
@@ -55,10 +56,10 @@ git_repo.push_tag() ────→ 推送到选定远程
 
 ### 核心函数
 
-#### **获取当前版本** (src/version.rs: lines 61-76)
+#### **获取当前版本** (src/domain/version.rs)
 
 ```rust
-pub fn parse_version_from_tag(tag: &str) -> Option<Version> {
+pub fn parse_from_tag(tag: &str) -> Option<Version> {
     // 移除 'v' 或 'V' 前缀
     let clean_tag = tag.trim_start_matches('v').trim_start_matches('V');
 
@@ -73,31 +74,33 @@ pub fn parse_version_from_tag(tag: &str) -> Option<Version> {
 }
 ```
 
-#### **版本递增** (src/version.rs: lines 99-115)
+#### **版本递增** (src/domain/version.rs)
 
 ```rust
-pub fn bump_version(mut version: Version, bump_type: &VersionBump) -> Version {
+pub fn bump(&mut self, bump_type: &VersionBump) {
     match bump_type {
         VersionBump::Major => {
-            version.major += 1;  // x → x+1
-            version.minor = 0;   // reset → 0
-            version.patch = 0;   // reset → 0
+            self.major += 1;  // x → x+1
+            self.minor = 0;   // reset → 0
+            self.patch = 0;   // reset → 0
         }
         VersionBump::Minor => {
-            version.minor += 1;  // 固定.y → 固定.y+1
-            version.patch = 0;   // reset → 0
+            self.minor += 1;  // 固定.y → 固定.y+1
+            self.patch = 0;   // reset → 0
         }
         VersionBump::Patch => {
-            version.patch += 1;  // 固定.固定.z → 固定.固定.z+1
+            self.patch += 1;  // 固定.固定.z → 固定.固定.z+1
         }
     }
-    version
 }
 ```
 
-#### **git_ops::get_latest_tag_on_branch()** (lines 222-256)
+#### **git_ops::get_latest_tag_on_branch()** ⭐ 关键函数
 
-这是获取前一个标签的**关键函数**：
+这是获取前一个标签的**关键函数**，支持两种模式：
+
+1. **本地模式** - 仅查找本地标签
+2. **远程模式** - 查找远程跟踪分支上的标签
 
 ```rust
 pub fn get_latest_tag_on_branch(&self, branch_name: &str) -> Result<Option<String>> {
@@ -138,27 +141,57 @@ pub fn get_latest_tag_on_branch(&self, branch_name: &str) -> Result<Option<Strin
 }
 ```
 
+#### **git_ops::create_tag()**
+
+此函数在目标分支上创建标签：
+
+```rust
+pub fn create_tag(&self, tag_name: &str, branch_name: Option<&str>) -> Result<()> {
+    if let Some(branch) = branch_name {
+        // 在指定分支上创建标签
+        let branch_oid = self.get_branch_head_oid(branch)?;
+        let commit = self.repo.find_commit(branch_oid)?;
+        self.repo.tag_lightweight(tag_name, commit.as_object(), false)?;
+    } else {
+        // 在当前 HEAD 上创建标签（默认行为）
+        let head = self.repo.head()?.peel_to_commit()?;
+        self.repo.tag_lightweight(tag_name, head.as_object(), false)?;
+    }
+    Ok(())
+}
+```
+
 ---
 
-## 3. Conventional Commit 分析
+## 3. Analyzer 模块（版本分析）
 
-#### **parse_conventional_commit()** (src/conventional.rs: lines 37-116)
+### 核心组件
 
-支持三种标准格式：
+`src/analyzer/version_analyzer.rs` 包含：
 
-1. **带 scope 的格式**: `type(scope)!: description`
-2. **破坏性变更（无 scope）**: `type!: description`
-3. **基础格式**: `type: description`
+1. **ParsedCommit** - 解析后的 Conventional Commit
+2. **VersionAnalyzer** - 版本分析逻辑
+3. **analyze_version_bump()** - 核心决策函数
 
-**决策优先级**:
+### 决策流程
+
 ```
-Breaking Changes (BREAKING CHANGE:, !) → Major
-Feature commits (feat, feature) → Minor
-Fix commits (fix, perf, refactor) → Patch
-No conventional commits → Patch (default)
+commits 列表
+    ↓
+遍历每个 commit message
+    ├─ 解析 Conventional Commit 格式
+    ├─ 检测破坏性变更 (BREAKING CHANGE, !)
+    ├─ 检测特性 (feat, feature)
+    └─ 检测修复 (fix, perf, refactor)
+    ↓
+决策优先级：
+1. 任何破坏性变更 → Major ⭐ 最高
+2. 任何特性 → Minor
+3. 任何修复 → Patch
+4. 无标准格式 → Patch (默认)
+    ↓
+返回 VersionBump 类型
 ```
-
----
 
 ## 4. 主程序流程
 
@@ -176,17 +209,20 @@ No conventional commits → Patch (default)
 │  ├─ 交互式选择分支 (ui::select_branch) [如需]
 │  └─ 验证选定分支存在
 │
-├─ 第 2 阶段: Git 数据收集
+├─ 第 2 阶段: 远程选择和 Git 数据收集
 │  ├─ 初始化 Git 仓库 (GitRepo::new)
+│  ├─ 列出可用远程 (git_repo.list_remotes)
+│  ├─ 三层次优先级选择远程: CLI > 配置 > 交互提示
+│  ├─ 验证远程存在性 (git_repo.remote_exists)
 │  ├─ 从选定远程拉取数据 (git_repo.fetch_from_remote)
 │  ├─ 获取最新标签 (git_repo.get_latest_tag_on_branch)
 │  └─ 获取新增 commits (git_repo.get_commits_since_tag)
 │
 ├─ 第 3 阶段: 版本计算
 │  ├─ 显示 commit 分析 (ui::display_commit_analysis)
-│  ├─ 决策版本递增 (conventional::determine_version_bump)
-│  ├─ 解析当前版本 (version::parse_version_from_tag)
-│  ├─ 计算新版本 (version::bump_version)
+│  ├─ 决策版本递增 (analyzer::analyze_version_bump)
+│  ├─ 解析当前版本 (Version::parse_from_tag)
+│  ├─ 计算新版本 (version.bump)
 │  └─ 应用标签模式 (pattern.replace("{version}"))
 │
 ├─ 第 4 阶段: 标签确认
@@ -219,6 +255,18 @@ No conventional commits → Patch (default)
 4. Config::default() (内置默认值)
 ```
 
+### 配置结构
+
+```rust
+pub struct Config {
+    pub branches: HashMap<String, String>,
+    pub conventional_commits: ConventionalCommitsConfig,
+    pub patterns: PatternsConfig,
+    pub behavior: BehaviorConfig,
+    pub prerelease: PreReleaseConfig,
+}
+```
+
 ### 默认配置
 
 ```toml
@@ -238,33 +286,56 @@ minor_keywords = ["feature", "feat", "enhancement"]
 
 ## 6. 核心数据结构
 
+### 版本 (src/domain/version.rs)
+
 ```rust
-// 版本
 pub struct Version {
     pub major: u32,
     pub minor: u32,
     pub patch: u32,
 }
 
-// 版本递增类型
 pub enum VersionBump {
     Major,
     Minor,
     Patch,
 }
+```
 
-// 解析后的 commit
+### 解析后的 Commit (src/analyzer/version_analyzer.rs)
+
+```rust
 pub struct ParsedCommit {
     pub r#type: String,
     pub scope: Option<String>,
     pub description: String,
     pub is_breaking_change: bool,
 }
+```
 
-// 配置
-pub struct Config {
-    pub branches: HashMap<String, String>,
-    pub conventional_commits: ConventionalCommitsConfig,
+### 标签 (src/domain/tag.rs)
+
+```rust
+pub struct Tag {
+    pub name: String,
+    pub pattern: TagPattern,
+}
+
+pub struct TagPattern {
+    pub pattern: String,
+}
+```
+
+### 错误类型 (src/error.rs)
+
+```rust
+pub enum GitPublishError {
+    Git(#[from] git2::Error),
+    Config(String),
+    Version(String),
+    Tag(String),
+    Remote(String),
+    Io(#[from] std::io::Error),
 }
 ```
 
@@ -272,7 +343,7 @@ pub struct Config {
 
 ## 7. 总结
 
-### 核心数据流:
+### 核心数据流
 
 ```
 Git Repository
@@ -290,10 +361,8 @@ Git Repository
 [Confirm] → Get user approval → Create tag → Push tag
 ```
 
-### 最重要的三个函数:
+### 最重要的三个函数
 
-1. **`get_latest_tag_on_branch()`** - 获取当前版本的标签
-2. **`get_commits_since_tag()`** - 获取需要分析的提交
-3. **`determine_version_bump()`** - 基于提交计算版本递增
-
----
+1. **`get_latest_tag_on_branch()`** (src/git_ops.rs) - 获取当前版本的标签
+2. **`get_commits_since_tag()`** (src/git_ops.rs) - 获取需要分析的提交
+3. **`analyze_version_bump()`** (src/analyzer) - 基于提交计算版本递增
