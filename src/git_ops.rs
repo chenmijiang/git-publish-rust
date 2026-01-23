@@ -163,7 +163,7 @@ impl GitRepo {
     /// # Returns
     /// * `Ok(())` - Successfully updated or no update needed
     /// * `Err` - If the operation cannot be completed
-    pub fn update_branch_from_remote(&self, branch_name: &str, remote_name: &str) -> Result<()> {
+    fn update_branch_from_remote(&self, branch_name: &str, remote_name: &str) -> Result<()> {
         // Get the remote-tracking branch OID
         let remote_tracking_branch_name = format!("{}/{}", remote_name, branch_name);
         let remote_ref = match self

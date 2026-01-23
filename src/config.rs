@@ -3,22 +3,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-/// Configuration for git hooks
-#[derive(Debug, Clone, Deserialize, Serialize, Default)]
-pub struct HooksConfig {
-    /// Path to pre-tag-create hook script
-    #[serde(default)]
-    pub pre_tag_create: Option<String>,
-
-    /// Path to post-tag-create hook script
-    #[serde(default)]
-    pub post_tag_create: Option<String>,
-
-    /// Path to post-push hook script
-    #[serde(default)]
-    pub post_push: Option<String>,
-}
-
 /// Represents the complete configuration for git-publish.
 ///
 /// Contains branch mappings, conventional commit settings, version formatting patterns, and behavior options.
@@ -38,9 +22,6 @@ pub struct Config {
 
     #[serde(default)]
     pub prerelease: PreReleaseConfig,
-
-    #[serde(default)]
-    pub hooks: HooksConfig,
 }
 
 /// Returns the default list of conventional commit types.
@@ -197,7 +178,6 @@ impl Default for Config {
             patterns: PatternsConfig::default(),
             behavior: BehaviorConfig::default(),
             prerelease: PreReleaseConfig::default(),
-            hooks: HooksConfig::default(),
         }
     }
 }
@@ -315,15 +295,6 @@ mod tests {
     }
 
     #[test]
-    fn test_config_hooks_default_empty() {
-        let config = HooksConfig::default();
-
-        assert!(config.pre_tag_create.is_none());
-        assert!(config.post_tag_create.is_none());
-        assert!(config.post_push.is_none());
-    }
-
-    #[test]
     fn test_config_full_default_structure() {
         let config = Config::default();
 
@@ -332,7 +303,6 @@ mod tests {
         assert!(!config.conventional_commits.types.is_empty());
         assert!(!config.patterns.version_format.is_empty());
         assert!(!config.prerelease.enabled); // disabled by default
-        assert!(config.hooks.pre_tag_create.is_none());
     }
 
     #[test]
@@ -367,30 +337,6 @@ auto_increment = true
     }
 
     #[test]
-    fn test_config_toml_parsing_with_hooks() {
-        let toml_str = r#"
-[hooks]
-pre_tag_create = "./scripts/pre-tag-create.sh"
-post_tag_create = "./scripts/post-tag-create.sh"
-post_push = "./scripts/post-push.sh"
-"#;
-        let config: Config = toml::from_str(toml_str).unwrap();
-
-        assert_eq!(
-            config.hooks.pre_tag_create,
-            Some("./scripts/pre-tag-create.sh".to_string())
-        );
-        assert_eq!(
-            config.hooks.post_tag_create,
-            Some("./scripts/post-tag-create.sh".to_string())
-        );
-        assert_eq!(
-            config.hooks.post_push,
-            Some("./scripts/post-push.sh".to_string())
-        );
-    }
-
-    #[test]
     fn test_config_toml_parsing_complete() {
         let toml_str = r#"
 [branches]
@@ -408,9 +354,6 @@ skip_remote_selection = true
 enabled = true
 default_identifier = "rc"
 auto_increment = false
-
-[hooks]
-pre_tag_create = "./hooks/pre.sh"
 "#;
         let config: Config = toml::from_str(toml_str).unwrap();
 
@@ -431,12 +374,6 @@ pre_tag_create = "./hooks/pre.sh"
         assert!(config.prerelease.enabled);
         assert_eq!(config.prerelease.default_identifier, "rc");
         assert!(!config.prerelease.auto_increment);
-
-        // Verify hooks
-        assert_eq!(
-            config.hooks.pre_tag_create,
-            Some("./hooks/pre.sh".to_string())
-        );
     }
 
     #[test]

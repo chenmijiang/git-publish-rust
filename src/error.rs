@@ -15,20 +15,11 @@ pub enum GitPublishError {
     #[error("Tag error: {0}")]
     Tag(String),
 
-    #[error("Hook execution failed: {0}")]
-    Hook(String),
-
     #[error("Remote operation failed: {0}")]
     Remote(String),
 
-    #[error("Branch error: {0}")]
-    Branch(String),
-
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-
-    #[error("Invalid argument: {0}")]
-    InvalidArgument(String),
 }
 
 /// Convenience type alias for Results in git-publish
@@ -50,24 +41,9 @@ impl GitPublishError {
         GitPublishError::Tag(msg.into())
     }
 
-    /// Create a hook error with context
-    pub fn hook(msg: impl Into<String>) -> Self {
-        GitPublishError::Hook(msg.into())
-    }
-
-    /// Create a branch error with context
-    pub fn branch(msg: impl Into<String>) -> Self {
-        GitPublishError::Branch(msg.into())
-    }
-
     /// Create a remote error with context
     pub fn remote(msg: impl Into<String>) -> Self {
         GitPublishError::Remote(msg.into())
-    }
-
-    /// Create an invalid argument error
-    pub fn invalid_arg(msg: impl Into<String>) -> Self {
-        GitPublishError::InvalidArgument(msg.into())
     }
 }
 
@@ -94,9 +70,6 @@ mod tests {
             .to_string()
             .contains("Version"));
         assert!(GitPublishError::tag("test").to_string().contains("Tag"));
-        assert!(GitPublishError::branch("test")
-            .to_string()
-            .contains("Branch"));
     }
 
     // Integration tests: edge cases and error scenarios
@@ -106,10 +79,7 @@ mod tests {
             GitPublishError::config("config issue"),
             GitPublishError::version("version issue"),
             GitPublishError::tag("tag issue"),
-            GitPublishError::hook("hook issue"),
             GitPublishError::remote("remote issue"),
-            GitPublishError::branch("branch issue"),
-            GitPublishError::invalid_arg("arg issue"),
         ];
 
         for err in errors {
@@ -124,7 +94,6 @@ mod tests {
             GitPublishError::config(""),
             GitPublishError::version(""),
             GitPublishError::tag(""),
-            GitPublishError::hook(""),
         ];
 
         for err in errors {
@@ -162,57 +131,6 @@ mod tests {
     }
 
     #[test]
-    fn test_error_invalid_argument_variant() {
-        let err = GitPublishError::invalid_arg("Invalid branch name");
-        assert!(err.to_string().contains("Invalid argument"));
-    }
-
-    #[test]
-    fn test_result_type_alias() {
-        fn returns_error() -> Result<String> {
-            Err(GitPublishError::version("test error"))
-        }
-
-        let result = returns_error();
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_result_ok_variant() {
-        fn returns_ok() -> Result<String> {
-            Ok("success".to_string())
-        }
-
-        let result = returns_ok();
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), "success");
-    }
-
-    #[test]
-    fn test_error_chaining_with_context() {
-        let base_err = GitPublishError::tag("Tag operation failed");
-        let msg = base_err.to_string();
-        assert_eq!(msg, "Tag error: Tag operation failed");
-    }
-
-    #[test]
-    fn test_error_display_escaping() {
-        let msgs = vec![
-            "path/to/file",
-            "C:\\Windows\\Path",
-            "user@host",
-            "tag-v1.2.3",
-            "branch_name-feature",
-        ];
-
-        for msg in msgs {
-            let err = GitPublishError::branch(msg);
-            let err_msg = err.to_string();
-            assert!(err_msg.contains(msg));
-        }
-    }
-
-    #[test]
     fn test_io_error_conversion() {
         let io_errors = vec![
             std::io::Error::new(std::io::ErrorKind::NotFound, "Not found"),
@@ -233,10 +151,7 @@ mod tests {
             (GitPublishError::config("x"), "Configuration error"),
             (GitPublishError::version("x"), "Version parsing error"),
             (GitPublishError::tag("x"), "Tag error"),
-            (GitPublishError::hook("x"), "Hook execution failed"),
             (GitPublishError::remote("x"), "Remote operation failed"),
-            (GitPublishError::branch("x"), "Branch error"),
-            (GitPublishError::invalid_arg("x"), "Invalid argument"),
         ];
 
         for (err, expected_prefix) in error_pairs {
@@ -256,13 +171,6 @@ mod tests {
         let s: String = err.to_string();
         assert!(!s.is_empty());
         assert!(s.contains("tag"));
-    }
-
-    #[test]
-    fn test_error_debug_format() {
-        let err = GitPublishError::branch("branch not found");
-        let debug_str = format!("{:?}", err);
-        assert!(debug_str.contains("Branch"));
     }
 
     #[test]

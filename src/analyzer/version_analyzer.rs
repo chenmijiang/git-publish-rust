@@ -1,8 +1,5 @@
 use crate::config::ConventionalCommitsConfig;
 use crate::domain::{ParsedCommit, VersionBump};
-use crate::error::Result;
-use crate::git::Repository;
-use git2::Oid;
 
 /// Analyzes commits to determine version bump type
 pub struct VersionAnalyzer {
@@ -13,18 +10,6 @@ impl VersionAnalyzer {
     /// Create a new version analyzer
     pub fn new(config: ConventionalCommitsConfig) -> Self {
         VersionAnalyzer { config }
-    }
-
-    /// Analyze commits from a repository between two OIDs to determine version bump
-    pub fn analyze_repository_range<R: Repository>(
-        &self,
-        repo: &R,
-        from_oid: Oid,
-        to_oid: Oid,
-    ) -> Result<VersionBump> {
-        let commits = repo.get_commits_between(from_oid, to_oid)?;
-        let messages: Vec<String> = commits.into_iter().map(|c| c.message).collect();
-        Ok(self.analyze_messages(&messages))
     }
 
     /// Analyze commit messages and determine version bump

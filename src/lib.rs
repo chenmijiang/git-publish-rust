@@ -3,9 +3,7 @@ pub mod boundary;
 pub mod config;
 pub mod domain;
 pub mod error;
-pub mod git;
 pub mod git_ops;
-pub mod hooks;
 pub mod ui;
 
 pub use domain::VersionBump;
