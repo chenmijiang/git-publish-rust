@@ -60,28 +60,28 @@ fn test_version_bump_detection() {
 
 #[test]
 fn test_version_parsing_and_bumping() {
-    use git_publish::version::{bump_version, parse_version_from_tag, VersionBump};
+    use git_publish::domain::{Version, VersionBump};
 
     // Test parsing version from tag
-    let version = parse_version_from_tag("v1.2.3").expect("Should parse version");
+    let version = Version::parse("v1.2.3").expect("Should parse version");
     assert_eq!(version.major, 1);
     assert_eq!(version.minor, 2);
     assert_eq!(version.patch, 3);
 
     // Test bumping version
-    let bumped = bump_version(version.clone(), &VersionBump::Minor);
+    let bumped = version.bump(&VersionBump::Minor);
     assert_eq!(bumped.major, 1);
     assert_eq!(bumped.minor, 3);
     assert_eq!(bumped.patch, 0);
 
     // Test major bump
-    let major_bumped = bump_version(version.clone(), &VersionBump::Major);
+    let major_bumped = version.bump(&VersionBump::Major);
     assert_eq!(major_bumped.major, 2);
     assert_eq!(major_bumped.minor, 0);
     assert_eq!(major_bumped.patch, 0);
 
     // Test patch bump
-    let patch_bumped = bump_version(version.clone(), &VersionBump::Patch);
+    let patch_bumped = version.bump(&VersionBump::Patch);
     assert_eq!(patch_bumped.major, 1);
     assert_eq!(patch_bumped.minor, 2);
     assert_eq!(patch_bumped.patch, 4);

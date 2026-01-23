@@ -2,16 +2,14 @@ use anyhow::{Context, Result};
 use clap::Parser;
 
 use boundary::BoundaryWarning;
-#[allow(unused_imports)]
-use cli::orchestration::PublishWorkflowArgs;
+use git_publish::domain::Version;
+use git_publish::VersionBump as DomainVersionBump;
 
 mod boundary;
-mod cli;
 mod config;
 mod conventional;
 mod git_ops;
 mod ui;
-mod version;
 
 #[derive(clap::Parser, Debug, Clone, PartialEq)]
 #[command(
@@ -66,24 +64,6 @@ fn main() -> Result<()> {
             std::process::exit(1);
         }
     };
-
-    // NOTE: Task 6 will replace the logic below with:
-    // let workflow_args = PublishWorkflowArgs {
-    //     config_path: args.config.clone(),
-    //     branch: args.branch.clone(),
-    //     remote: args.remote.clone(),
-    //     force: args.force,
-    //     dry_run: args.dry_run,
-    // };
-    // match cli::orchestration::run_publish_workflow(workflow_args, config) {
-    //     Ok(result) => {
-    //         println!("✓ Successfully published tag {} for branch {}", result.tag, result.branch);
-    //     }
-    //     Err(e) => {
-    //         eprintln!("Error: {}", e);
-    //         std::process::exit(1);
-    //     }
-    // }
 
     // CURRENT: Keep existing logic for backward compatibility during Task 5 migration
 
@@ -274,30 +254,39 @@ fn main() -> Result<()> {
     // Calculate the new version
     let new_version = match latest_tag.as_ref() {
         Some(tag) => {
-            if let Some(current_version) = version::parse_version_from_tag(tag) {
-                version::bump_version(current_version, &version_bump)
-            } else {
-                // Unable to parse tag - display warning
-                let warning = BoundaryWarning::UnparsableTag {
-                    tag: tag.clone(),
-                    reason: "Version number format not recognized".to_string(),
-                };
-                ui::display_boundary_warning(&warning);
-
-                if !args.force
-                    && !args.dry_run
-                    && !ui::confirm_action("Use initial version v0.1.0 and continue?")?
-                {
-                    println!("Operation cancelled by user.");
-                    return Ok(());
+            match Version::parse(tag) {
+                Ok(current_version) => {
+                    // Convert conventional::VersionBump to domain::VersionBump
+                    let domain_bump = match version_bump {
+                        conventional::VersionBump::Major => DomainVersionBump::Major,
+                        conventional::VersionBump::Minor => DomainVersionBump::Minor,
+                        conventional::VersionBump::Patch => DomainVersionBump::Patch,
+                    };
+                    current_version.bump(&domain_bump)
                 }
+                Err(_) => {
+                    // Unable to parse tag - display warning
+                    let warning = BoundaryWarning::UnparsableTag {
+                        tag: tag.clone(),
+                        reason: "Version number format not recognized".to_string(),
+                    };
+                    ui::display_boundary_warning(&warning);
 
-                version::Version::new(0, 1, 0)
+                    if !args.force
+                        && !args.dry_run
+                        && !ui::confirm_action("Use initial version v0.1.0 and continue?")?
+                    {
+                        println!("Operation cancelled by user.");
+                        return Ok(());
+                    }
+
+                    Version::new(0, 1, 0)
+                }
             }
         }
         None => {
             // If no tag exists, start with 0.1.0
-            version::Version::new(0, 1, 0)
+            Version::new(0, 1, 0)
         }
     };
 

@@ -1,5 +1,12 @@
 use crate::config;
-pub use crate::version::VersionBump;
+
+/// Version bump type (mirrors domain::VersionBump)
+#[derive(Debug, Clone, PartialEq)]
+pub enum VersionBump {
+    Major,
+    Minor,
+    Patch,
+}
 
 /// Represents a parsed conventional commit message.
 ///
