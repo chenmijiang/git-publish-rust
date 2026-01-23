@@ -1,5 +1,6 @@
 pub mod analyzer;
 pub mod boundary;
+pub mod cli;
 pub mod config;
 pub mod conventional;
 pub mod domain;

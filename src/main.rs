@@ -4,6 +4,7 @@ use clap::Parser;
 use boundary::BoundaryWarning;
 
 mod boundary;
+mod cli;
 mod config;
 mod conventional;
 mod git_ops;
