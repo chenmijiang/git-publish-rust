@@ -239,6 +239,26 @@ impl GitRepo {
         Ok(())
     }
 
+    /// Gets the commit object ID (OID) of a branch head from a reference name.
+    ///
+    /// # Arguments
+    /// * `ref_name` - Full reference name (e.g., "refs/remotes/origin/main")
+    ///
+    /// # Returns
+    /// * `Ok(Oid)` - The commit OID at the reference
+    /// * `Err` - If reference not found
+    fn get_branch_head_oid_from_ref(&self, ref_name: &str) -> Result<Oid> {
+        match self.repo.find_reference(ref_name) {
+            Ok(reference) => {
+                let oid = reference.target().ok_or_else(|| {
+                    anyhow::anyhow!("Reference {} is not a direct reference", ref_name)
+                })?;
+                Ok(oid)
+            }
+            Err(_) => Err(anyhow::anyhow!("Reference {} not found", ref_name)),
+        }
+    }
+
     /// Gets the commit object ID (OID) of a branch head.
     ///
     /// # Arguments
@@ -253,7 +273,79 @@ impl GitRepo {
         Ok(commit.id())
     }
 
-    /// Finds the latest tag on a specific branch.
+    /// Finds the latest tag on a specific branch, checking both local and remote-tracking branches.
+    ///
+    /// Walks the commit history from the branch head backwards to find the most recent tag.
+    /// If a remote name is provided, also checks the remote-tracking branch and returns the
+    /// latest tag reachable from either branch (prioritizing the remote-tracking branch if both exist).
+    /// Handles both lightweight and annotated tags.
+    ///
+    /// # Arguments
+    /// * `branch_name` - Name of the branch to search
+    /// * `remote_name` - Optional name of the remote (e.g., "origin"). If provided, also
+    ///   check the remote-tracking branch for tags.
+    ///
+    /// # Returns
+    /// * `Ok(Some(tag))` - The latest tag name found
+    /// * `Ok(None)` - If no tags exist on this branch
+    /// * `Err` - If branch lookup fails
+    pub fn get_latest_tag_on_branch_with_remote(
+        &self,
+        branch_name: &str,
+        remote_name: Option<&str>,
+    ) -> Result<Option<String>> {
+        // Helper function to find latest tag starting from a given OID
+        let find_tag_from_oid = |oid: git2::Oid| -> Result<Option<String>> {
+            let mut revwalk = self.repo.revwalk()?;
+            revwalk.push(oid)?;
+
+            // Get all tags and their OIDs (handles both lightweight and annotated tags)
+            let mut tag_oids = std::collections::HashMap::new();
+            let tags = self.repo.tag_names(None)?;
+
+            for tag_name in tags.iter().flatten() {
+                if let Ok(tag_ref) = self.repo.find_reference(&format!("refs/tags/{}", tag_name)) {
+                    // Peel to any object (commit, tag, etc.)
+                    if let Ok(tag_obj) = tag_ref.peel(git2::ObjectType::Any) {
+                        let tag_oid = tag_obj.id();
+                        tag_oids.insert(tag_oid, tag_name.to_string());
+                    }
+                }
+            }
+
+            // Find the latest tag on this branch
+            for oid in revwalk {
+                match oid {
+                    Ok(oid) => {
+                        if let Some(tag_name) = tag_oids.get(&oid) {
+                            return Ok(Some(tag_name.clone()));
+                        }
+                    }
+                    Err(_) => continue,
+                }
+            }
+
+            Ok(None)
+        };
+
+        // First, try to get tag from the remote-tracking branch if remote is provided
+        if let Some(remote) = remote_name {
+            let remote_tracking_branch = format!("{}/{}", remote, branch_name);
+            if let Ok(remote_oid) = self
+                .get_branch_head_oid_from_ref(&format!("refs/remotes/{}", remote_tracking_branch))
+            {
+                if let Ok(Some(tag)) = find_tag_from_oid(remote_oid) {
+                    return Ok(Some(tag));
+                }
+            }
+        }
+
+        // Fall back to local branch
+        let local_oid = self.get_branch_head_oid(branch_name)?;
+        find_tag_from_oid(local_oid)
+    }
+
+    /// Finds the latest tag on a specific branch (local branch only).
     ///
     /// Walks the commit history from the branch head backwards to find the most recent tag.
     /// Handles both lightweight and annotated tags.
@@ -266,39 +358,7 @@ impl GitRepo {
     /// * `Ok(None)` - If no tags exist on this branch
     /// * `Err` - If branch lookup fails
     pub fn get_latest_tag_on_branch(&self, branch_name: &str) -> Result<Option<String>> {
-        let branch_oid = self.get_branch_head_oid(branch_name)?;
-
-        // Walk the commit history to find the latest tag
-        let mut revwalk = self.repo.revwalk()?;
-        revwalk.push(branch_oid)?;
-
-        // Get all tags and their OIDs (handles both lightweight and annotated tags)
-        let mut tag_oids = std::collections::HashMap::new();
-        let tags = self.repo.tag_names(None)?;
-
-        for tag_name in tags.iter().flatten() {
-            if let Ok(tag_ref) = self.repo.find_reference(&format!("refs/tags/{}", tag_name)) {
-                // Peel to any object (commit, tag, etc.)
-                if let Ok(tag_obj) = tag_ref.peel(git2::ObjectType::Any) {
-                    let tag_oid = tag_obj.id();
-                    tag_oids.insert(tag_oid, tag_name.to_string());
-                }
-            }
-        }
-
-        // Find the latest tag on this branch
-        for oid in revwalk {
-            match oid {
-                Ok(oid) => {
-                    if let Some(tag_name) = tag_oids.get(&oid) {
-                        return Ok(Some(tag_name.clone()));
-                    }
-                }
-                Err(_) => continue,
-            }
-        }
-
-        Ok(None)
+        self.get_latest_tag_on_branch_with_remote(branch_name, None)
     }
 
     /// Gets all commits on a branch since a specific tag.

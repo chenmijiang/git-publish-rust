@@ -61,8 +61,6 @@ fn main() -> Result<()> {
         }
     };
 
-    // CURRENT: Keep existing logic for backward compatibility during Task 5 migration
-
     // Select branch to tag
     let branch_to_tag = if let Some(branch) = args.branch {
         branch
@@ -195,8 +193,10 @@ fn main() -> Result<()> {
         }
     }
 
-    // Get the latest tag on the selected branch
-    let latest_tag = match git_repo.get_latest_tag_on_branch(&branch_to_tag) {
+    // Get the latest tag on the selected branch, checking both local and remote-tracking branches
+    let latest_tag = match git_repo
+        .get_latest_tag_on_branch_with_remote(&branch_to_tag, Some(&selected_remote))
+    {
         Ok(tag) => tag,
         Err(e) => {
             ui::display_error(&format!(

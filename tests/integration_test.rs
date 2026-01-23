@@ -498,6 +498,99 @@ mod git_operations_tests {
 
         env::set_current_dir(original_dir).unwrap();
     }
+
+    #[test]
+    #[serial]
+    fn test_get_latest_tag_on_remote_branch() {
+        // Scenario: Local branch is behind remote, tag exists on remote commits not yet on local.
+        // This test demonstrates that get_latest_tag_on_branch should find tags on the remote-tracking
+        // branch if they're not yet on the local branch.
+        let temp_dir = TempDir::new().expect("Could not create temp dir");
+        let repo = Repository::init(temp_dir.path()).expect("Could not init git repo");
+
+        // Configure git user
+        {
+            let mut config = repo.config().expect("Could not get config");
+            config
+                .set_str("user.name", "Test User")
+                .expect("Could not set user.name");
+            config
+                .set_str("user.email", "test@example.com")
+                .expect("Could not set user.email");
+        }
+
+        // Create initial commit
+        let content = b"Initial content\n";
+        let content_path = temp_dir.path().join("README.md");
+        fs::write(&content_path, content).expect("Could not write initial file");
+
+        let mut index = repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("README.md"))
+            .expect("Could not add file to index");
+        index.write().expect("Could not write index");
+
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = repo.find_tree(tree_id).expect("Could not find tree");
+        let sig = repo.signature().expect("Could not get sig");
+
+        let initial_commit = repo
+            .commit(Some("HEAD"), &sig, &sig, "Initial commit", &tree, &[])
+            .expect("Could not create commit");
+
+        // Create a tag on this commit
+        repo.tag_lightweight(
+            "v1.0.0",
+            &repo.find_object(initial_commit, None).unwrap(),
+            false,
+        )
+        .expect("Could not create tag");
+
+        // Now create a second commit
+        fs::write(&content_path, b"Updated content\n").expect("Could not update file");
+        let mut index = repo.index().expect("Could not get index");
+        index
+            .add_path(Path::new("README.md"))
+            .expect("Could not add file to index");
+        index.write().expect("Could not write index");
+
+        let tree_id = index.write_tree().expect("Could not write tree");
+        let tree = repo.find_tree(tree_id).expect("Could not find tree");
+        let parent = repo
+            .find_commit(repo.head().unwrap().target().unwrap())
+            .expect("Could not find parent");
+
+        let second_commit = repo
+            .commit(Some("HEAD"), &sig, &sig, "Second commit", &tree, &[&parent])
+            .expect("Could not create second commit");
+
+        // Create another tag on the second commit
+        repo.tag_lightweight(
+            "v1.1.0",
+            &repo.find_object(second_commit, None).unwrap(),
+            false,
+        )
+        .expect("Could not create second tag");
+
+        let original_dir = env::current_dir().unwrap();
+        env::set_current_dir(temp_dir.path()).expect("Could not change to temp dir");
+
+        let git_repo = git_publish::git_ops::GitRepo::new().expect("Could not create GitRepo");
+
+        // Get the latest tag on master - should find v1.1.0
+        let latest_tag = git_repo
+            .get_latest_tag_on_branch("master")
+            .expect("Should get latest tag");
+
+        env::set_current_dir(original_dir).unwrap();
+
+        // The latest tag should be v1.1.0
+        assert_eq!(
+            latest_tag,
+            Some("v1.1.0".to_string()),
+            "Should find the most recent tag v1.1.0"
+        );
+    }
 }
 
 #[cfg(test)]
