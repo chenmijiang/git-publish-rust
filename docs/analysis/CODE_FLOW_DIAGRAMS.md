@@ -5,26 +5,33 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                      git-publish CLI                             │
-│                      (main.rs - 303行)                           │
+│                      (main.rs - 379行)                          │
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌──────────────────────────────────────────────────────────┐   │
 │  │ 第1阶段: 初始化                                          │   │
-│  │  • 解析命令行参数 (--config, --branch, --force, etc)    │   │
+│  │  • 解析命令行参数 (--config, --branch, --remote, etc)  │   │
 │  │  • 加载配置 (config.rs)                                 │   │
 │  │  • 选择分支 (ui.rs)                                    │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │           ↓                                                      │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │ 第2阶段: Git 数据收集                                    │   │
-│  │  • GitRepo::new() - 初始化仓库                          │   │
-│  │  • fetch_from_remote() - 拉取数据                       │   │
-│  │  • get_latest_tag_on_branch() ⭐ - 获取前一个标签      │   │
-│  │  • get_commits_since_tag() ⭐ - 获取新增commits      │   │
-│  │  (全部在 git_ops.rs - 422行)                           │   │
+│  │ 第2阶段: 远程选择 ⭐                                    │   │
+│  │  • list_remotes() - 获取可用远程仓库                    │   │
+│  │  • 三层次优先级选择远程: CLI > 配置 > 交互提示         │   │
+│  │  • remote_exists() - 验证远程存在性                    │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │           ↓                                                      │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │ 第3阶段: 版本计算                                        │   │
+│  │ 第3阶段: Git 数据收集                                    │   │
+│  │  • GitRepo::new() - 初始化仓库                          │   │
+│  │  • fetch_from_remote() - 拉取数据                       │   │
+│  │  • get_latest_tag_on_branch() ⭐ - 获取前一个标签      │   │
+│  │  • get_commits_since_tag() ⭐ - 获取新增commits        │   │
+│  │  (全部在 git_ops.rs - 469行)                           │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│           ↓                                                      │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │ 第4阶段: 版本计算                                        │   │
 │  │  • determine_version_bump() (conventional.rs)           │   │
 │  │  • parse_version_from_tag() (version.rs)               │   │
 │  │  • bump_version() (version.rs)                         │   │
@@ -32,7 +39,7 @@
 │  └──────────────────────────────────────────────────────────┘   │
 │           ↓                                                      │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │ 第4阶段: 用户交互确认 (ui.rs)                            │   │
+│  │ 第5阶段: 用户交互确认 (ui.rs)                            │   │
 │  │  • 显示 commit 分析                                     │   │
 │  │  • 显示拟议标签变更                                     │   │
 │  │  • 选择/自定义标签                                      │   │
@@ -40,10 +47,10 @@
 │  └──────────────────────────────────────────────────────────┘   │
 │           ↓                                                      │
 │  ┌──────────────────────────────────────────────────────────┐   │
-│  │ 第5阶段: 标签创建和推送 (git_ops.rs)                    │   │
+│  │ 第6阶段: 标签创建和推送 (git_ops.rs)                    │   │
 │  │  • create_tag() - 创建本地标签                          │   │
 │  │  • confirm_push_tag() - 确认推送                        │   │
-│  │  • push_tag() - 推送到远程                              │   │
+│  │  • push_tag() - 推送到选定远程                          │   │
 │  └──────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -260,6 +267,7 @@ lib.rs (公共导出)
 │    → branches: main, develop, gray             │
 │    → commit_types: feat, fix, docs, ...       │
 │    → breaking indicators: BREAKING CHANGE:    │
+│    → behavior: skip_remote_selection = false   │
 │                                                │
 └────────────────────────────────────────────────┘
 ```
@@ -275,7 +283,17 @@ main.rs
   │  └─ Repository::discover(".")
   │     └─ .git directory
   │
-  ├─ fetch_from_remote("origin", "main")
+  ├─ list_remotes()
+  │  ├─ repo.remotes()
+  │  ├─ sort with "origin" first
+  │  └─ return Vec<String>
+  │
+  ├─ remote_exists("origin")
+  │  ├─ repo.find_remote(name)
+  │  ├─ check ErrorCode::NotFound
+  │  └─ return bool
+  │
+  ├─ fetch_from_remote("selected_remote", "main")
   │  ├─ remote.fetch(refspecs)
   │  │  ├─ +refs/heads/*:refs/remotes/origin/*
   │  │  └─ +refs/tags/*:refs/tags/*
@@ -302,8 +320,8 @@ main.rs
   │  ├─ head().peel_to_commit()
   │  └─ tag_lightweight(tag_name, commit, false)
   │
-  └─ push_tag("v1.3.0")
-     ├─ find_remote("origin")
+  └─ push_tag("v1.3.0", "selected_remote")
+     ├─ find_remote("selected_remote")
      ├─ set up SSH credentials
      └─ remote.push(["refs/tags/v1.3.0"])
 ```

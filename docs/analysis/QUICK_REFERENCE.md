@@ -83,7 +83,7 @@ Ok(None)            // 没有标签
 Err(...)            // 错误（分支不存在等）
 ```
 
-**调用位置**: `main.rs:129`
+**调用位置**: `main.rs:200`
 
 **示例场景**:
 ```
@@ -119,7 +119,7 @@ pub fn get_commits_since_tag(
 vec![commit_oldest, ..., commit_newest]
 ```
 
-**调用位置**: `main.rs:141`
+**调用位置**: `main.rs:212`
 
 **示例场景**:
 ```
@@ -136,7 +136,7 @@ Returns: [commit1("fix: bug"), commit2("feat: new")]
 
 ---
 
-### 2.3 从远程拉取 (git_ops.rs:44-106)
+### 2.3 从远程拉取 (git_ops.rs:90-152)
 
 ```rust
 pub fn fetch_from_remote(&self, remote_name: &str, branch_name: &str) -> Result<()>
@@ -156,13 +156,71 @@ pub fn fetch_from_remote(&self, remote_name: &str, branch_name: &str) -> Result<
 
 **错误处理**:
 - SSH 密钥查找顺序: `id_ed25519` → `id_rsa` → `id_ecdsa` → SSH agent
-- 认证错误会在 `main.rs:101` 检测并提示用户
+- 认证错误会在 `main.rs:171-176` 检测并提示用户
 
-**调用位置**: `main.rs:94`
+**调用位置**: `main.rs:158-197`
 
 ---
 
-### 2.4 创建标签 (git_ops.rs:343-348)
+### 2.4 获取所有远程仓库 (git_ops.rs:36-56)
+
+```rust
+pub fn list_remotes(&self) -> Result<Vec<String>>
+```
+
+**功能**: 获取所有配置的远程仓库名称，按规范排序
+
+**算法**:
+1. 获取仓库中的所有远程名称
+2. 排序时 "origin" 优先，其他按字母顺序排列
+
+**返回值**:
+```rust
+// 例如: ["origin", "upstream", "fork"] - origin 始终在首位
+vec!["origin", "upstream"]
+```
+
+**调用位置**: `main.rs:116`
+
+**示例**:
+```rust
+// 假设有 "upstream", "origin", "fork" 三个远程仓库
+let remotes = git_repo.list_remotes()?;
+// 返回: ["origin", "fork", "upstream"] - origin 优先，其余按字母排序
+```
+
+---
+
+### 2.5 检查远程仓库存在性 (git_ops.rs:67-73)
+
+```rust
+pub fn remote_exists(&self, remote_name: &str) -> Result<bool>
+```
+
+**功能**: 检查指定名称的远程仓库是否存在
+
+**算法**:
+1. 尝试查找指定名称的远程
+2. 根据错误码判断远程是否存在
+
+**返回值**:
+```rust
+Ok(true)  // 远程存在
+Ok(false) // 远程不存在
+Err(...)  // 其他错误
+```
+
+**调用位置**: `main.rs:101-112`
+
+**示例**:
+```rust
+let exists = git_repo.remote_exists("origin")?;  // 检查 origin 是否存在
+assert_eq!(exists, true);
+```
+
+---
+
+### 2.6 创建标签 (git_ops.rs:389-394)
 
 ```rust
 pub fn create_tag(&self, tag_name: &str) -> Result<()>
@@ -180,25 +238,45 @@ self.repo.tag_lightweight(tag_name, head.as_object(), false)?;
 - `tag_name`: 标签名称（如 `"v1.3.0"`）
 - `force = false`: 不覆盖现有标签
 
-**调用位置**: `main.rs:247`
+**调用位置**: `main.rs:318`
 
 ---
 
-### 2.5 推送标签 (git_ops.rs:360-421)
+### 2.5 推送标签 (git_ops.rs:407-468)
 
 ```rust
-pub fn push_tag(&self, tag_name: &str) -> Result<()>
+pub fn push_tag(&self, tag_name: &str, remote_name: &str) -> Result<()>
 ```
 
-**功能**: 推送标签到 origin 远程
+**功能**: 推送标签到指定远程仓库
 
 **步骤**:
-1. 查找 "origin" 远程
+1. 查找指定远程仓库
 2. 设置 SSH 凭证和 push 选项
 3. 推送 `refs/tags/{tag_name}`
 4. 处理错误（网络、认证、引用）
 
-**调用位置**: `main.rs:263`
+**参数**:
+- `tag_name`: 要推送的标签名
+- `remote_name`: 目标远程仓库名（如 "origin"）
+
+**调用位置**: `main.rs:337`
+
+---
+
+### 2.6 获取当前 HEAD 哈希 (git_ops.rs:372-379)
+
+```rust
+pub fn get_current_head_hash(&self) -> Result<String>
+```
+
+**功能**: 获取当前 HEAD 的完整 40 字符 SHA-1 哈希
+
+**返回值**:
+- `Ok(String)`: 完整的 40 字符 SHA-1 哈希
+- `Err(...)`: HEAD 无效或分离状态
+
+**调用位置**: `main.rs:230`
 
 ---
 
@@ -420,7 +498,13 @@ main()
  ├─→ GitRepo::new()
  │    └─ Repository::discover(".")
  │
- ├─→ fetch_from_remote("origin", branch)
+ ├─→ list_remotes()
+ │    └─ 获取所有可用远程仓库
+ │
+ ├─→ select remote (CLI > config > prompt)
+ │    └─ 三层次优先级选择远程: CLI标志 > 配置(skip_remote_selection) > 交互式提示
+ │
+ ├─→ fetch_from_remote("selected_remote", branch)
  │    └─ 拉取所有分支和标签
  │
  ├─→ get_latest_tag_on_branch(branch) ⭐
@@ -452,8 +536,8 @@ main()
  ├─→ confirm_push_tag()
  │    └─ 用户确认是否推送
  │
- ├─→ push_tag(final_tag) [if confirmed]
- │    └─ 推送到 origin
+ ├─→ push_tag(final_tag, "selected_remote") [if confirmed]
+ │    └─ 推送到选定的远程
  │
  └─→ Success!
 ```
@@ -465,15 +549,16 @@ main()
 | 行号 | 检查 | 失败行为 | 恢复方式 |
 |------|------|--------|--------|
 | 52-58 | 加载配置 | 显示错误，退出 | - |
-| 84-90 | 初始化仓库 | 显示错误，退出 | - |
-| 94-126 | Fetch 数据 | 检测认证错误 | 询问继续 |
-| 129-138 | 获取标签 | 显示错误，退出 | - |
-| 141-150 | 获取 commits | 显示错误，退出 | - |
-| 158-171 | 无新 commits | 显示警告 | 询问继续 |
-| 181-208 | 解析版本 | 显示警告，使用 v0.1.0 | 询问接受 |
-| 229 | 验证格式 | 显示错误 | 允许重新编辑 |
-| 247 | 创建标签 | 显示错误，退出 | - |
-| 263 | 推送标签 | 显示错误，退出 | - |
+| 92-98 | 初始化仓库 | 显示错误，退出 | - |
+| 101-112 | 验证远程存在性 | 显示错误，退出 | - |
+| 158-197 | Fetch 数据 | 检测认证错误 | 询问继续 |
+| 200-209 | 获取标签 | 显示错误，退出 | - |
+| 212-221 | 获取 commits | 显示错误，退出 | - |
+| 229-242 | 无新 commits | 显示警告 | 询问继续 |
+| 252-279 | 解析版本 | 显示警告，使用 v0.1.0 | 询问接受 |
+| 300 | 验证格式 | 显示错误 | 允许重新编辑 |
+| 318-321 | 创建标签 | 显示错误，退出 | - |
+| 337-340 | 推送标签 | 显示错误，退出 | - |
 
 ---
 
