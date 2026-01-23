@@ -143,6 +143,10 @@ impl super::Repository for Git2Repository {
     }
 }
 
+// SAFETY: Git2Repository wraps git2::Repository which is Send + Sync.
+// git2 library is thread-safe for read operations via libgit2's thread-safe design.
+unsafe impl Sync for Git2Repository {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

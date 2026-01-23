@@ -18,7 +18,7 @@ pub struct CommitInfo {
 }
 
 /// Common git operation trait for abstraction
-pub trait Repository: Send {
+pub trait Repository: Send + Sync {
     /// Get the OID of a branch's HEAD
     fn get_branch_head_oid(&self, branch_name: &str) -> Result<Oid>;
 
