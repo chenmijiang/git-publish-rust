@@ -116,3 +116,13 @@ fn test_branch_selection_validation() {
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("not configured"));
 }
+
+#[test]
+fn test_git_repo_initialization() {
+    // The function should be able to initialize a git repo
+    // Since we're in the git-publish repo, this should succeed
+    let result = git_publish::cli::orchestration::initialize_git_repo();
+
+    // Should succeed when called from within a git repo
+    assert!(result.is_ok(), "Should initialize git repo successfully");
+}

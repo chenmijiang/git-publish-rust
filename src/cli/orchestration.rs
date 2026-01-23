@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
+use git2;
 
 use crate::config::Config;
 
@@ -87,6 +88,21 @@ pub fn select_branch_for_workflow(
             "Multiple branches configured - interactive selection not yet implemented in orchestration"
         ))
     }
+}
+
+/// Initialize git repository for workflow
+///
+/// Opens or discovers the current git repository. This should be called
+/// early in the workflow to fail fast if not in a git repository.
+///
+/// # Returns
+///
+/// Result indicating successful initialization or error
+#[allow(dead_code)]
+pub fn initialize_git_repo() -> Result<()> {
+    // Try to open a git repository in the current directory or any parent
+    git2::Repository::discover(".")?;
+    Ok(())
 }
 
 /// Main publish workflow
