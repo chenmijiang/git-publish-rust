@@ -19,6 +19,9 @@ pub struct Config {
 
     #[serde(default)]
     pub behavior: BehaviorConfig,
+
+    #[serde(default)]
+    pub prerelease: PreReleaseConfig,
 }
 
 /// Returns the default list of conventional commit types.
@@ -124,6 +127,44 @@ pub struct BehaviorConfig {
     pub skip_remote_selection: bool,
 }
 
+/// Configuration for pre-release version handling.
+///
+/// Controls how pre-release versions (alpha, beta, rc, custom) are managed.
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq)]
+pub struct PreReleaseConfig {
+    /// Enable pre-release version support
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Default pre-release identifier ("alpha", "beta", "rc", or custom)
+    #[serde(default = "default_prerelease_identifier")]
+    pub default_identifier: String,
+
+    /// Auto-increment iteration number
+    #[serde(default = "default_prerelease_auto_increment")]
+    pub auto_increment: bool,
+}
+
+/// Returns the default pre-release identifier
+fn default_prerelease_identifier() -> String {
+    "alpha".to_string()
+}
+
+/// Returns the default auto-increment setting
+fn default_prerelease_auto_increment() -> bool {
+    true
+}
+
+impl Default for PreReleaseConfig {
+    fn default() -> Self {
+        PreReleaseConfig {
+            enabled: false,
+            default_identifier: default_prerelease_identifier(),
+            auto_increment: default_prerelease_auto_increment(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         let mut branches = HashMap::new();
@@ -136,6 +177,7 @@ impl Default for Config {
             conventional_commits: ConventionalCommitsConfig::default(),
             patterns: PatternsConfig::default(),
             behavior: BehaviorConfig::default(),
+            prerelease: PreReleaseConfig::default(),
         }
     }
 }
