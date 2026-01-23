@@ -1,8 +1,10 @@
 // tests/integration_test.rs
+use serial_test::serial;
 use std::env;
 use std::process::Command;
 
 #[test]
+#[serial]
 fn test_git_publish_help() {
     let output = Command::new("cargo")
         .args(&["run", "--bin", "git-publish", "--", "--help"])
@@ -16,6 +18,7 @@ fn test_git_publish_help() {
 }
 
 #[test]
+#[serial]
 fn test_git_publish_version() {
     let output = Command::new("cargo")
         .args(&["run", "--bin", "git-publish", "--", "--version"])
@@ -119,6 +122,7 @@ fn test_conventional_commit_parsing() {
 mod git_operations_tests {
     use super::*;
     use git2::Repository;
+    use serial_test::serial;
     use std::fs;
     use std::path::Path;
     use tempfile::TempDir;
@@ -197,6 +201,7 @@ mod git_operations_tests {
     }
 
     #[test]
+    #[serial]
     fn test_git_repo_operations() {
         // This test creates a temporary git repository for testing git operations
         let temp_dir = setup_test_repo();
@@ -217,6 +222,7 @@ mod git_operations_tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_latest_lightweight_tag_on_branch() {
         // Test that get_latest_tag_on_branch correctly finds lightweight tags
         let temp_dir = TempDir::new().expect("Could not create temp dir");
@@ -287,6 +293,7 @@ mod git_operations_tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_commits_since_lightweight_tag() {
         // Test that get_commits_since_tag works correctly with lightweight tags
         let temp_dir = TempDir::new().expect("Could not create temp dir");
@@ -381,6 +388,7 @@ mod git_operations_tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_current_head_hash() {
         let temp_dir = setup_test_repo();
         let original_dir = env::current_dir().unwrap();
@@ -411,6 +419,7 @@ mod git_operations_tests {
     }
 
     #[test]
+    #[serial]
     fn test_get_current_head_hash_multiple_commits() {
         // Verify that HEAD hash is correctly fetched after multiple commits
         let temp_dir = TempDir::new().expect("Could not create temp dir");
@@ -475,6 +484,7 @@ mod git_operations_tests {
     }
 
     #[test]
+    #[serial]
     fn test_remote_exists_validates_remote_presence() {
         let temp_dir = setup_test_repo();
 
@@ -555,11 +565,13 @@ mod ui_boundary_tests {
 mod fetch_refspec_tests {
     use super::*;
     use git2::Repository;
+    use serial_test::serial;
     use std::fs;
     use std::path::Path;
     use tempfile::TempDir;
 
     #[test]
+    #[serial]
     fn test_fetch_with_explicit_refspecs_when_on_target_branch() {
         // This test reproduces the scenario where current branch is the target branch
         // and verifies that fetch works correctly with explicit refspecs
@@ -658,10 +670,12 @@ mod fetch_refspec_tests {
 #[cfg(test)]
 mod remote_selection_tests {
     use git2::Repository;
+    use serial_test::serial;
     use std::env;
     use tempfile::TempDir;
 
     #[test]
+    #[serial]
     fn test_list_remotes_returns_all_configured_remotes() {
         // Create a temporary git repository with multiple remotes
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -693,6 +707,7 @@ mod remote_selection_tests {
     }
 
     #[test]
+    #[serial]
     fn test_list_remotes_orders_origin_first() {
         // Create a temporary git repository with remotes
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -723,6 +738,7 @@ mod remote_selection_tests {
     }
 
     #[test]
+    #[serial]
     fn test_list_remotes_single_remote() {
         // Create a temporary git repository with single remote
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -748,6 +764,7 @@ mod remote_selection_tests {
     }
 
     #[test]
+    #[serial]
     fn test_push_tag_accepts_remote_parameter() {
         // This test verifies that push_tag function signature accepts remote_name parameter
         // We're testing the function exists and has correct signature
@@ -800,7 +817,10 @@ mod remote_selection_tests {
 
 #[cfg(test)]
 mod cli_remote_flag_tests {
+    use serial_test::serial;
+
     #[test]
+    #[serial]
     fn test_cli_accepts_remote_flag() {
         let output = std::process::Command::new("cargo")
             .args(&["run", "--", "--help"])
@@ -819,6 +839,7 @@ mod cli_remote_flag_tests {
     }
 
     #[test]
+    #[serial]
     fn test_remote_flag_validates_remote_exists() {
         // Test that the --remote flag is properly parsed by clap
         // We verify the flag appears in help and can be parsed
