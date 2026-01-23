@@ -7,6 +7,7 @@ pub mod domain;
 pub mod error;
 pub mod git;
 pub mod git_ops;
+pub mod hooks;
 pub mod ui;
 pub mod version;
 

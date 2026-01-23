@@ -3,6 +3,22 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
+/// Configuration for git hooks
+#[derive(Debug, Clone, Deserialize, Serialize, Default)]
+pub struct HooksConfig {
+    /// Path to pre-tag-create hook script
+    #[serde(default)]
+    pub pre_tag_create: Option<String>,
+
+    /// Path to post-tag-create hook script
+    #[serde(default)]
+    pub post_tag_create: Option<String>,
+
+    /// Path to post-push hook script
+    #[serde(default)]
+    pub post_push: Option<String>,
+}
+
 /// Represents the complete configuration for git-publish.
 ///
 /// Contains branch mappings, conventional commit settings, version formatting patterns, and behavior options.
@@ -22,6 +38,9 @@ pub struct Config {
 
     #[serde(default)]
     pub prerelease: PreReleaseConfig,
+
+    #[serde(default)]
+    pub hooks: HooksConfig,
 }
 
 /// Returns the default list of conventional commit types.
@@ -178,6 +197,7 @@ impl Default for Config {
             patterns: PatternsConfig::default(),
             behavior: BehaviorConfig::default(),
             prerelease: PreReleaseConfig::default(),
+            hooks: HooksConfig::default(),
         }
     }
 }
