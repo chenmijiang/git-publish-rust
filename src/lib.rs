@@ -1,7 +1,6 @@
 pub mod analyzer;
 pub mod boundary;
 pub mod config;
-pub mod conventional;
 pub mod domain;
 pub mod error;
 pub mod git;

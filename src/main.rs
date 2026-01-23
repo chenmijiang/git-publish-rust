@@ -1,15 +1,11 @@
 use anyhow::{Context, Result};
 use clap::Parser;
 
-use boundary::BoundaryWarning;
+use git_publish::boundary::BoundaryWarning;
+use git_publish::config;
 use git_publish::domain::Version;
-use git_publish::VersionBump as DomainVersionBump;
-
-mod boundary;
-mod config;
-mod conventional;
-mod git_ops;
-mod ui;
+use git_publish::git_ops;
+use git_publish::ui;
 
 #[derive(clap::Parser, Debug, Clone, PartialEq)]
 #[command(
@@ -247,21 +243,18 @@ fn main() -> Result<()> {
     // Display commit analysis
     ui::display_commit_analysis(&commit_messages, &branch_to_tag);
 
-    // Determine the version bump based on commits
-    let version_bump =
-        conventional::determine_version_bump(&commit_messages, &config.conventional_commits);
+    // Determine the version bump based on commits using domain module
+    let version_bump = git_publish::domain::commit::analyze_version_bump(
+        &commit_messages,
+        &config.conventional_commits,
+    );
 
     // Calculate the new version
     let new_version = match latest_tag.as_ref() {
         Some(tag) => {
             match Version::parse(tag) {
                 Ok(current_version) => {
-                    // Convert conventional::VersionBump to domain::VersionBump
-                    let domain_bump = match version_bump {
-                        conventional::VersionBump::Major => DomainVersionBump::Major,
-                        conventional::VersionBump::Minor => DomainVersionBump::Minor,
-                        conventional::VersionBump::Patch => DomainVersionBump::Patch,
-                    };
+                    let domain_bump = version_bump;
                     current_version.bump(&domain_bump)
                 }
                 Err(_) => {

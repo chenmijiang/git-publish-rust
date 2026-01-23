@@ -45,7 +45,8 @@ fn test_config_loading() {
 #[test]
 fn test_version_bump_detection() {
     use git_publish::config::ConventionalCommitsConfig;
-    use git_publish::conventional::{determine_version_bump, VersionBump};
+    use git_publish::domain::commit::analyze_version_bump;
+    use git_publish::domain::VersionBump;
 
     let config = ConventionalCommitsConfig::default();
     let commit_messages = vec![
@@ -53,7 +54,7 @@ fn test_version_bump_detection() {
         "fix: resolve login issue".to_string(),
     ];
 
-    let bump = determine_version_bump(&commit_messages, &config);
+    let bump = analyze_version_bump(&commit_messages, &config);
     // Since there's a feat commit, it should be at least minor
     assert!(matches!(bump, VersionBump::Major | VersionBump::Minor));
 }
@@ -89,31 +90,28 @@ fn test_version_parsing_and_bumping() {
 
 #[test]
 fn test_conventional_commit_parsing() {
-    use git_publish::conventional::parse_conventional_commit;
+    use git_publish::domain::commit::ParsedCommit;
 
     // Test standard conventional commit
-    let parsed =
-        parse_conventional_commit("feat(auth): add new login system").expect("Should parse");
+    let parsed = ParsedCommit::parse("feat(auth): add new login system");
     assert_eq!(parsed.r#type, "feat");
     assert_eq!(parsed.scope, Some("auth".to_string()));
     assert_eq!(parsed.description, "add new login system");
     assert_eq!(parsed.is_breaking_change, false);
 
     // Test breaking change with ! syntax
-    let parsed_breaking =
-        parse_conventional_commit("feat!: remove deprecated API").expect("Should parse");
+    let parsed_breaking = ParsedCommit::parse("feat!: remove deprecated API");
     assert_eq!(parsed_breaking.r#type, "feat");
     assert_eq!(parsed_breaking.is_breaking_change, true);
 
     // Test breaking change in footer
     let breaking_with_footer = "feat: new feature\n\nBREAKING CHANGE: This changes the API";
-    let parsed_footer = parse_conventional_commit(breaking_with_footer).expect("Should parse");
+    let parsed_footer = ParsedCommit::parse(breaking_with_footer);
     assert_eq!(parsed_footer.r#type, "feat");
     assert_eq!(parsed_footer.is_breaking_change, true);
 
     // Test non-conventional commit (should default to chore)
-    let parsed_non_conv =
-        parse_conventional_commit("Update README").expect("Should parse as chore");
+    let parsed_non_conv = ParsedCommit::parse("Update README");
     assert_eq!(parsed_non_conv.r#type, "chore");
     assert_eq!(parsed_non_conv.description, "Update README");
 }

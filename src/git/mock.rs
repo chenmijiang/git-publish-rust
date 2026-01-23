@@ -3,15 +3,58 @@ use crate::git::{CommitInfo, Repository};
 use git2::Oid;
 use std::collections::HashMap;
 
-/// Mock repository for testing without actual git operations
+/// Mock implementation of the Repository trait for testing
+///
+/// This implementation simulates Git operations without requiring an actual Git repository.
+/// It stores commits, tags, and branch heads in memory and returns predefined values.
+/// This enables fast, deterministic tests without external dependencies or file system operations.
+///
+/// # Usage
+///
+/// The mock repository starts empty. Tests should populate it with relevant data before
+/// using it with the trait methods.
+///
+/// ```rust
+/// # use git_publish::git::{MockRepository, Repository, CommitInfo};
+/// # use git2::Oid;
+/// let mut repo = MockRepository::new();
+/// let oid = Oid::from_str("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2").unwrap();
+///
+/// repo.add_commit(
+///     oid,
+///     CommitInfo {
+///         hash: "a1b2c3d4e5f6".to_string(),
+///         message: "Test commit".to_string(),
+///         author: "Test Author".to_string(),
+///     }
+/// );
+/// repo.set_branch_head("main", oid);
+///
+/// assert_eq!(repo.get_branch_head_oid("main").unwrap(), oid);
+/// ```
 pub struct MockRepository {
+    /// Map of OIDs to commit information
     commits: HashMap<Oid, CommitInfo>,
+    /// Map of tag names to their OIDs
     tags: HashMap<String, Oid>,
+    /// Map of branch names to their HEAD OIDs
     branch_heads: HashMap<String, Oid>,
 }
 
 impl MockRepository {
     /// Create a new empty mock repository
+    ///
+    /// The repository starts with no commits, tags, or branches configured.
+    ///
+    /// # Returns
+    /// * `MockRepository` - A new empty mock repository instance
+    ///
+    /// # Example
+    /// ```rust
+    /// # use git_publish::git::{mock::MockRepository, Repository};
+    /// let repo = MockRepository::new();
+    /// assert!(repo.list_tags().unwrap().is_empty());
+    /// ```
     pub fn new() -> Self {
         MockRepository {
             commits: HashMap::new(),
@@ -21,16 +64,77 @@ impl MockRepository {
     }
 
     /// Add a commit to the mock repository
+    ///
+    /// This associates an OID with commit information in the mock. The commit becomes
+    /// available when using methods like `get_commits_between`.
+    ///
+    /// # Arguments
+    /// * `oid` - The object ID to associate with the commit
+    /// * `info` - The commit information to store
+    ///
+    /// # Example
+    /// ```rust
+    /// # use git_publish::git::{mock::MockRepository, CommitInfo};
+    /// # use git2::Oid;
+    /// let mut repo = MockRepository::new();
+    /// let oid = Oid::from_str("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2").unwrap();
+    ///
+    /// repo.add_commit(
+    ///     oid,
+    ///     CommitInfo {
+    ///         hash: "a1b2c3d4e5f6".to_string(),
+    ///         message: "Initial commit".to_string(),
+    ///         author: "Alice".to_string(),
+    ///     }
+    /// );
+    /// ```
     pub fn add_commit(&mut self, oid: Oid, info: CommitInfo) {
         self.commits.insert(oid, info);
     }
 
     /// Add a tag pointing to an OID
+    ///
+    /// This creates a mapping from a tag name to an object ID in the mock.
+    ///
+    /// # Arguments
+    /// * `name` - The name of the tag (e.g., "v1.0.0", "release-1.2")
+    /// * `oid` - The object ID the tag should point to
+    ///
+    /// # Example
+    /// ```rust
+    /// # use git_publish::git::{mock::MockRepository, Repository};
+    /// # use git2::Oid;
+    /// let mut repo = MockRepository::new();
+    /// let oid = Oid::from_str("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2").unwrap();
+    ///
+    /// repo.add_tag("v1.0.0", oid);
+    ///
+    /// assert_eq!(repo.find_tag_oid("v1.0.0").unwrap(), Some(oid));
+    /// ```
     pub fn add_tag(&mut self, name: impl Into<String>, oid: Oid) {
         self.tags.insert(name.into(), oid);
     }
 
-    /// Set a branch head
+    /// Set a branch head to point to a specific OID
+    ///
+    /// This determines what OID will be returned when `get_branch_head_oid` is called
+    /// for the given branch.
+    ///
+    /// # Arguments
+    /// * `branch` - The name of the branch (e.g., "main", "develop", "feature/new-ui")
+    /// * `oid` - The object ID the branch should point to
+    ///
+    /// # Example
+    /// ```rust
+    /// # use git_publish::git::{mock::MockRepository, Repository};
+    /// # use git2::Oid;
+    /// let mut repo = MockRepository::new();
+    /// let main_oid = Oid::from_str("a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2").unwrap();
+    ///
+    /// repo.set_branch_head("main", main_oid);
+    ///
+    /// assert_eq!(repo.get_branch_head_oid("main").unwrap(), main_oid);
+    /// ```
     pub fn set_branch_head(&mut self, branch: impl Into<String>, oid: Oid) {
         self.branch_heads.insert(branch.into(), oid);
     }
@@ -49,11 +153,31 @@ impl Repository for MockRepository {
         })
     }
 
-    fn get_commits_between(&self, _from_oid: Oid, _to_oid: Oid) -> Result<Vec<CommitInfo>> {
-        // Simplified: return commits in order from hashmap
-        let mut commits: Vec<_> = self.commits.values().cloned().collect();
-        commits.sort_by_key(|c| c.hash.clone());
-        Ok(commits)
+    fn get_commits_between(&self, from_oid: Oid, to_oid: Oid) -> Result<Vec<CommitInfo>> {
+        // Implement more realistic git semantics for the mock:
+        // - If from_oid == to_oid: return that specific commit if it exists
+        // - Otherwise: return all commits in the mock except the from_oid (git .. semantics)
+
+        if from_oid == to_oid {
+            // Git semantics: X..X should return no commits, but for this mock
+            // returning the specific commit might be more useful for tests
+            if let Some(commit) = self.commits.get(&from_oid) {
+                Ok(vec![commit.clone()])
+            } else {
+                Ok(vec![])
+            }
+        } else {
+            // Return all commits except the from_oid (git A..B semantics)
+            let mut commits: Vec<_> = self
+                .commits
+                .iter()
+                .filter(|(oid, _)| *oid != &from_oid)
+                .map(|(_, info)| info.clone())
+                .collect();
+
+            commits.sort_by(|a, b| a.hash.cmp(&b.hash));
+            Ok(commits)
+        }
     }
 
     fn find_tag_oid(&self, tag_name: &str) -> Result<Option<Oid>> {
@@ -72,8 +196,9 @@ impl Repository for MockRepository {
         Ok(())
     }
 
-    fn fetch_from_remote(&self, _remote: &str, _branch: &str) -> Result<()> {
-        Ok(())
+    fn fetch_from_remote(&self, _remote: &str, _branch: &str) -> Result<Oid> {
+        // In the mock, return a dummy OID since we don't actually perform Git operations
+        Ok(Oid::from_bytes(&[0; 20]).unwrap())
     }
 }
 
@@ -150,8 +275,11 @@ mod tests {
             },
         );
 
+        // Test that get_commits_between returns all commits except from_oid (git .. semantics)
         let commits = repo.get_commits_between(oid1, oid2).unwrap();
-        assert_eq!(commits.len(), 2);
+        // Should return all commits in the repo except oid1 (the from_oid)
+        assert_eq!(commits.len(), 1);
+        assert_eq!(commits[0].hash, "def456");
     }
 
     #[test]
@@ -351,7 +479,8 @@ mod tests {
         repo.set_branch_head("main", oid4);
 
         let commits = repo.get_commits_between(oid1, oid4).unwrap();
-        assert_eq!(commits.len(), 4);
+        // Should return all commits except oid1 (git .. semantics)
+        assert_eq!(commits.len(), 3);
     }
 
     #[test]
@@ -362,5 +491,50 @@ mod tests {
         assert!(repo.find_tag_oid("v1.0.0").unwrap().is_none());
 
         assert!(repo.get_branch_head_oid("main").is_err());
+    }
+}
+
+#[cfg(test)]
+mod mock_filtering_tests {
+    use super::*;
+
+    #[test]
+    fn test_mock_repository_commit_filtering() {
+        let mut repo = MockRepository::new();
+        let oid1 = Oid::from_bytes(&[1; 20]).unwrap();
+        let oid2 = Oid::from_bytes(&[2; 20]).unwrap();
+        let oid3 = Oid::from_bytes(&[3; 20]).unwrap();
+
+        repo.add_commit(
+            oid1,
+            CommitInfo {
+                hash: "aaa".to_string(),
+                message: "commit 1".to_string(),
+                author: "Author".to_string(),
+            },
+        );
+        repo.add_commit(
+            oid2,
+            CommitInfo {
+                hash: "bbb".to_string(),
+                message: "commit 2".to_string(),
+                author: "Author".to_string(),
+            },
+        );
+        repo.add_commit(
+            oid3,
+            CommitInfo {
+                hash: "ccc".to_string(),
+                message: "commit 3".to_string(),
+                author: "Author".to_string(),
+            },
+        );
+
+        // Test the commit filtering behavior - should return all commits except from_oid
+        let commits = repo.get_commits_between(oid1, oid3).unwrap();
+
+        // Should return all commits in the mock except oid1 (the from_oid)
+        assert_eq!(commits.len(), 2);
+        // The result includes both oid2 ("bbb") and oid3 ("ccc"), excluding oid1
     }
 }

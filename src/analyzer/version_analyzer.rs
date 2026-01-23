@@ -1,19 +1,37 @@
 use crate::config::ConventionalCommitsConfig;
 use crate::domain::{ParsedCommit, VersionBump};
+use crate::error::Result;
+use crate::git::Repository;
+use git2::Oid;
 
 /// Analyzes commits to determine version bump type
-pub struct VersionAnalyzer;
+pub struct VersionAnalyzer {
+    config: ConventionalCommitsConfig,
+}
 
 impl VersionAnalyzer {
     /// Create a new version analyzer
-    pub fn new(_config: ConventionalCommitsConfig) -> Self {
-        VersionAnalyzer
+    pub fn new(config: ConventionalCommitsConfig) -> Self {
+        VersionAnalyzer { config }
+    }
+
+    /// Analyze commits from a repository between two OIDs to determine version bump
+    pub fn analyze_repository_range<R: Repository>(
+        &self,
+        repo: &R,
+        from_oid: Oid,
+        to_oid: Oid,
+    ) -> Result<VersionBump> {
+        let commits = repo.get_commits_between(from_oid, to_oid)?;
+        let messages: Vec<String> = commits.into_iter().map(|c| c.message).collect();
+        Ok(self.analyze_messages(&messages))
     }
 
     /// Analyze commit messages and determine version bump
-    pub fn analyze(&self, messages: &[String]) -> VersionBump {
+    pub fn analyze_messages(&self, messages: &[String]) -> VersionBump {
         let mut has_breaking = false;
         let mut has_features = false;
+        let mut has_fixes = false;
 
         for message in messages {
             let parsed = ParsedCommit::parse(message);
@@ -23,24 +41,41 @@ impl VersionAnalyzer {
                 has_breaking = true;
             }
 
-            // Check for features
-            if self.is_feature(&parsed.r#type) {
-                has_features = true;
+            // Check for major version indicators
+            for keyword in &self.config.major_keywords {
+                if message.to_lowercase().contains(keyword) {
+                    has_features = true;
+                }
+            }
+
+            // Check for minor version indicators
+            for keyword in &self.config.minor_keywords {
+                if message.to_lowercase().contains(keyword) {
+                    has_features = true;
+                }
+            }
+
+            // Check for commit types that might indicate features or fixes
+            match parsed.r#type.as_str() {
+                "feat" | "feature" => has_features = true,
+                "fix" | "perf" | "refactor" => has_fixes = true,
+                _ => {}
+            }
+
+            // If we found a breaking change, we can return early
+            if has_breaking {
+                return VersionBump::Major;
             }
         }
 
-        // Decision tree (priority order)
-        if has_breaking {
-            VersionBump::Major
-        } else if has_features {
+        if has_features {
             VersionBump::Minor
+        } else if has_fixes {
+            VersionBump::Patch
         } else {
+            // If no conventional commits detected, default to patch
             VersionBump::Patch
         }
-    }
-
-    fn is_feature(&self, commit_type: &str) -> bool {
-        commit_type == "feat" || commit_type == "feature"
     }
 }
 
@@ -60,7 +95,7 @@ mod tests {
             "fix(api)!: breaking change".to_string(),
         ];
 
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Major);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Major);
     }
 
     #[test]
@@ -70,7 +105,7 @@ mod tests {
 
         let messages = vec!["feat: new feature".to_string(), "fix: bug fix".to_string()];
 
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Minor);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Minor);
     }
 
     #[test]
@@ -83,7 +118,7 @@ mod tests {
             "refactor: code cleanup".to_string(),
         ];
 
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Patch);
     }
 
     #[test]
@@ -93,7 +128,7 @@ mod tests {
 
         let messages = vec!["docs: update readme".to_string()];
 
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Patch);
     }
 
     // Integration tests: real-world commit scenarios
@@ -103,7 +138,7 @@ mod tests {
         let analyzer = VersionAnalyzer::new(config);
 
         let messages = vec!["feat(api)!: redesign endpoint".to_string()];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Major);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Major);
     }
 
     #[test]
@@ -112,7 +147,7 @@ mod tests {
         let analyzer = VersionAnalyzer::new(config);
 
         let messages = vec!["feat(auth): add oauth support".to_string()];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Minor);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Minor);
     }
 
     #[test]
@@ -121,7 +156,7 @@ mod tests {
         let analyzer = VersionAnalyzer::new(config);
 
         let messages = vec!["fix(ui): button styling".to_string()];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Patch);
     }
 
     #[test]
@@ -134,7 +169,7 @@ mod tests {
             "fix(ui): button color".to_string(),
             "fix(db): connection pool".to_string(),
         ];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Minor);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Minor);
     }
 
     #[test]
@@ -148,7 +183,7 @@ mod tests {
             "perf: optimize".to_string(),
             "refactor: cleanup".to_string(),
         ];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Patch);
     }
 
     #[test]
@@ -158,7 +193,7 @@ mod tests {
 
         let messages =
             vec!["fix: rename API field\n\nBREAKING CHANGE: field changed from X to Y".to_string()];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Major);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Major);
     }
 
     #[test]
@@ -171,7 +206,7 @@ mod tests {
             "feat: new feature 2".to_string(),
             "fix(core)!: breaking change".to_string(),
         ];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Major);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Major);
     }
 
     #[test]
@@ -185,7 +220,7 @@ mod tests {
             "style: format code".to_string(),
             "test: add tests".to_string(),
         ];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Patch);
     }
 
     #[test]
@@ -200,7 +235,7 @@ mod tests {
             "fix(ui): modal alignment".to_string(),
             "docs: update api docs".to_string(),
         ];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Minor);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Minor);
     }
 
     #[test]
@@ -215,7 +250,7 @@ mod tests {
             "feat(auth): add oauth2".to_string(),
             "fix: various bugs".to_string(),
         ];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Major);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Major);
     }
 
     #[test]
@@ -229,7 +264,7 @@ mod tests {
             "fix(db): query optimization".to_string(),
             "perf: cache results".to_string(),
         ];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Patch);
     }
 
     #[test]
@@ -247,7 +282,7 @@ mod tests {
             "fix: edge case handling".to_string(),
             "feat: new search feature".to_string(),
         ];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Minor);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Minor);
     }
 
     #[test]
@@ -256,7 +291,7 @@ mod tests {
         let analyzer = VersionAnalyzer::new(config);
 
         let messages = vec!["".to_string()];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Patch);
     }
 
     #[test]
@@ -269,6 +304,6 @@ mod tests {
             "Fixed things".to_string(),
             "Added more stuff".to_string(),
         ];
-        assert_eq!(analyzer.analyze(&messages), VersionBump::Patch);
+        assert_eq!(analyzer.analyze_messages(&messages), VersionBump::Patch);
     }
 }
