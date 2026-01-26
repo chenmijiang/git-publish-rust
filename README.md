@@ -1,4 +1,6 @@
-# Git Publish
+# Git Publish v0.1.0
+
+A Rust CLI tool that automates the process of creating and pushing git tags based on configurable branch-to-tag-pattern mappings and semantic versioning analysis of conventional commits.
 
 A Rust CLI tool for creating and pushing git tags based on configurable branch-to-tag-pattern mappings and conventional commit analysis.
 
@@ -18,8 +20,8 @@ First, make sure you have Rust and Cargo installed. Then:
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-repo/git-publish.git
-cd git-publish
+git clone https://github.com/chenmijiang/git-publish-rust.git
+cd git-publish-rust
 
 # Build the project
 cargo build --release
@@ -120,4 +122,4 @@ The tool analyzes commits using conventional commit format to determine version 
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [Cargo.toml](./Cargo.toml) file for details.
