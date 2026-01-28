@@ -276,7 +276,7 @@ mod git_operations_tests {
 
         // Get the latest tag on the branch
         let latest_tag = git_repo
-            .get_latest_tag_on_branch("master")
+            .get_latest_tag_on_branch("master", None)
             .expect("Should get latest tag");
 
         // Change back to the original directory
@@ -579,7 +579,7 @@ mod git_operations_tests {
 
         // Get the latest tag on master - should find v1.1.0
         let latest_tag = git_repo
-            .get_latest_tag_on_branch("master")
+            .get_latest_tag_on_branch("master", None)
             .expect("Should get latest tag");
 
         env::set_current_dir(original_dir).unwrap();

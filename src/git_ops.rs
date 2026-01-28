@@ -293,17 +293,52 @@ impl GitRepo {
         &self,
         branch_name: &str,
         remote_name: Option<&str>,
+        tag_pattern: Option<&str>,
     ) -> Result<Option<String>> {
+        // Extract prefix from tag pattern (e.g., "g" from "g{version}", "v" from "v{version}")
+        let tag_prefix: Option<String> = tag_pattern.and_then(|pattern| {
+            if let Some(pos) = pattern.find("{version}") {
+                let prefix = &pattern[..pos];
+                if !prefix.is_empty() {
+                    return Some(prefix.to_string());
+                }
+            }
+            None
+        });
+
+        // Helper function to check if a tag matches the expected pattern
+        let matches_tag_pattern = |tag: &str| -> bool {
+            if let Some(ref prefix) = tag_prefix {
+                // Tag must start with the expected prefix
+                if !tag.starts_with(prefix.as_str()) {
+                    return false;
+                }
+                // After the prefix, must start with a digit
+                let rest = &tag[prefix.len()..];
+                rest.chars().next().is_some_and(|c| c.is_ascii_digit())
+            } else {
+                // No pattern specified, accept any semver-like tag
+                // (starts with optional v/V followed by digit)
+                let trimmed = tag.trim_start_matches('v').trim_start_matches('V');
+                trimmed.chars().next().is_some_and(|c| c.is_ascii_digit())
+            }
+        };
+
         // Helper function to find latest tag starting from a given OID
         let find_tag_from_oid = |oid: git2::Oid| -> Result<Option<String>> {
             let mut revwalk = self.repo.revwalk()?;
             revwalk.push(oid)?;
 
             // Get all tags and their OIDs (handles both lightweight and annotated tags)
+            // Only include tags that match the expected pattern
             let mut tag_oids = std::collections::HashMap::new();
             let tags = self.repo.tag_names(None)?;
 
             for tag_name in tags.iter().flatten() {
+                // Skip tags that don't match the pattern
+                if !matches_tag_pattern(tag_name) {
+                    continue;
+                }
                 if let Ok(tag_ref) = self.repo.find_reference(&format!("refs/tags/{}", tag_name)) {
                     // Peel to any object (commit, tag, etc.)
                     if let Ok(tag_obj) = tag_ref.peel(git2::ObjectType::Any) {
@@ -357,8 +392,8 @@ impl GitRepo {
     /// * `Ok(Some(tag))` - The latest tag name found
     /// * `Ok(None)` - If no tags exist on this branch
     /// * `Err` - If branch lookup fails
-    pub fn get_latest_tag_on_branch(&self, branch_name: &str) -> Result<Option<String>> {
-        self.get_latest_tag_on_branch_with_remote(branch_name, None)
+    pub fn get_latest_tag_on_branch(&self, branch_name: &str, tag_pattern: Option<&str>) -> Result<Option<String>> {
+        self.get_latest_tag_on_branch_with_remote(branch_name, None, tag_pattern)
     }
 
     /// Gets all commits on a branch since a specific tag.

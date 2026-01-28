@@ -40,9 +40,22 @@ impl Version {
         }
     }
 
-    /// Parse version from a tag string (e.g., "v1.2.3" or "v1.2.3-beta.1")
+    /// Parse version from a tag string (e.g., "v1.2.3", "g1.2.3", or "v1.2.3-beta.1")
+    ///
+    /// Supports any single alphabetic character prefix (v, g, d, etc.) followed by
+    /// a semantic version number.
     pub fn parse(tag: &str) -> Result<Self> {
-        let clean_tag = tag.trim_start_matches('v').trim_start_matches('V');
+        // Strip any single alphabetic character prefix (v, g, d, etc.)
+        let clean_tag = if tag
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic())
+            && tag.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
+        {
+            &tag[1..]
+        } else {
+            tag
+        };
 
         // Split on '-' to separate version from pre-release
         let (version_part, prerelease_part) = if let Some(pos) = clean_tag.find('-') {
