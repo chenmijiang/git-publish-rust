@@ -392,7 +392,11 @@ impl GitRepo {
     /// * `Ok(Some(tag))` - The latest tag name found
     /// * `Ok(None)` - If no tags exist on this branch
     /// * `Err` - If branch lookup fails
-    pub fn get_latest_tag_on_branch(&self, branch_name: &str, tag_pattern: Option<&str>) -> Result<Option<String>> {
+    pub fn get_latest_tag_on_branch(
+        &self,
+        branch_name: &str,
+        tag_pattern: Option<&str>,
+    ) -> Result<Option<String>> {
         self.get_latest_tag_on_branch_with_remote(branch_name, None, tag_pattern)
     }
 
@@ -520,21 +524,40 @@ impl GitRepo {
 
         // Set credentials callback if needed
         let mut callbacks = git2::RemoteCallbacks::new();
-        callbacks.credentials(|_url, username_from_url, _allowed_types| {
-            // Try to get credentials from various sources
-            if let Some(username) = username_from_url {
-                git2::Cred::ssh_key(
-                    username,
-                    None,
-                    std::path::Path::new(&format!(
-                        "{}/.ssh/id_rsa",
-                        std::env::var("HOME").unwrap_or_else(|_| ".".to_string())
-                    )),
-                    None,
-                )
-            } else {
-                git2::Cred::default()
+        callbacks.credentials(|_url, username_from_url, allowed_types| {
+            // SSH key authentication
+            if allowed_types.contains(git2::CredentialType::SSH_KEY) {
+                // Try different key types in order of preference
+                let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+                let key_paths = vec![
+                    format!("{}/.ssh/id_ed25519", home),
+                    format!("{}/.ssh/id_rsa", home),
+                    format!("{}/.ssh/id_ecdsa", home),
+                ];
+
+                for key_path in key_paths {
+                    let path = std::path::Path::new(&key_path);
+                    if path.exists() {
+                        if let Ok(cred) = git2::Cred::ssh_key(
+                            username_from_url.unwrap_or("git"),
+                            None,
+                            path,
+                            None,
+                        ) {
+                            return Ok(cred);
+                        }
+                    }
+                }
+
+                // Try SSH agent as fallback
+                if let Ok(cred) = git2::Cred::ssh_key_from_agent(username_from_url.unwrap_or("git"))
+                {
+                    return Ok(cred);
+                }
             }
+
+            // Fall back to default credentials
+            git2::Cred::default()
         });
 
         // Add a push update reference callback to catch errors during push

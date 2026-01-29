@@ -46,10 +46,7 @@ impl Version {
     /// a semantic version number.
     pub fn parse(tag: &str) -> Result<Self> {
         // Strip any single alphabetic character prefix (v, g, d, etc.)
-        let clean_tag = if tag
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_alphabetic())
+        let clean_tag = if tag.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
             && tag.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
         {
             &tag[1..]

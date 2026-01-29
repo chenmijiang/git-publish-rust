@@ -197,9 +197,11 @@ fn main() -> Result<()> {
     let tag_pattern = config.branches.get(&branch_to_tag).map(|s| s.as_str());
 
     // Get the latest tag on the selected branch, checking both local and remote-tracking branches
-    let latest_tag = match git_repo
-        .get_latest_tag_on_branch_with_remote(&branch_to_tag, Some(&selected_remote), tag_pattern)
-    {
+    let latest_tag = match git_repo.get_latest_tag_on_branch_with_remote(
+        &branch_to_tag,
+        Some(&selected_remote),
+        tag_pattern,
+    ) {
         Ok(tag) => tag,
         Err(e) => {
             ui::display_error(&format!(
