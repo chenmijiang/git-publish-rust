@@ -1,4 +1,4 @@
-# git-publish 快速参考手册 (更新于 2026-01-23)
+# git-publish 快速参考手册 (更新于 2026-02-04)
 
 ## 1. 版本相关函数速查
 
@@ -115,7 +115,7 @@ pub fn load_config(config_path: Option<&str>)
     -> Result<Config, Box<dyn std::error::Error>>
 ```
 
-按优先级加载配置：CLI 参数 → 当前目录 → 用户目录 → 内置默认。
+按优先级加载配置：CLI 参数 → 仓库根目录 → 用户目录 → 内置默认。
 
 ---
 
@@ -159,7 +159,7 @@ pub fn select_or_customize_tag(recommended_tag: &str, _pattern: &str) -> Result<
 main()
  │
  ├─→ load_config(config_path)
- │    └─ 搜索: --config → ./gitpublish.toml → ~/.config → defaults
+ │    └─ 搜索: --config → repo_root/gitpublish.toml → ~/.config → defaults
  │
  ├─→ GitRepo::new()
  │    └─ Repository::discover(".")

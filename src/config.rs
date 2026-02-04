@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 
 /// Represents the complete configuration for git-publish.
 ///
@@ -186,7 +186,7 @@ impl Default for Config {
 ///
 /// Attempts to load configuration in the following order:
 /// 1. Custom path provided as parameter
-/// 2. `gitpublish.toml` in current directory
+/// 2. `gitpublish.toml` in the git repository root
 /// 3. `~/.config/.gitpublish.toml` in user config directory
 /// 4. Default configuration if no file found
 ///
@@ -199,8 +199,20 @@ impl Default for Config {
 pub fn load_config(config_path: Option<&str>) -> Result<Config, Box<dyn std::error::Error>> {
     let config_str = if let Some(path) = config_path {
         fs::read_to_string(path)?
-    } else if Path::new("./gitpublish.toml").exists() {
-        fs::read_to_string("./gitpublish.toml")?
+    } else if let Some(repo_root) = find_repo_root() {
+        let repo_config_path = repo_root.join("gitpublish.toml");
+        if repo_config_path.exists() {
+            fs::read_to_string(repo_config_path)?
+        } else if let Some(config_dir) = dirs::config_dir() {
+            let config_path = config_dir.join(".gitpublish.toml");
+            if config_path.exists() {
+                fs::read_to_string(config_path)?
+            } else {
+                return Ok(Config::default());
+            }
+        } else {
+            return Ok(Config::default());
+        }
     } else if let Some(config_dir) = dirs::config_dir() {
         let config_path = config_dir.join(".gitpublish.toml");
         if config_path.exists() {
@@ -216,9 +228,22 @@ pub fn load_config(config_path: Option<&str>) -> Result<Config, Box<dyn std::err
     Ok(config)
 }
 
+fn find_repo_root() -> Option<PathBuf> {
+    let current_dir = std::env::current_dir().ok()?;
+    let repo = git2::Repository::discover(current_dir).ok()?;
+
+    if let Some(workdir) = repo.workdir() {
+        return Some(workdir.to_path_buf());
+    }
+
+    Some(repo.path().to_path_buf())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
+    use tempfile::TempDir;
 
     // Integration tests: configuration scenarios
     #[test]
@@ -436,5 +461,62 @@ release = "release/{version}"
             config.branches.get("release"),
             Some(&"release/{version}".to_string())
         );
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_config_from_repo_root_when_in_subdir() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = temp_dir.path();
+        git2::Repository::init(repo_root).unwrap();
+
+        let config_content = r#"
+[branches]
+main = "root-{version}"
+"#;
+        let config_path = repo_root.join("gitpublish.toml");
+        fs::write(&config_path, config_content).unwrap();
+
+        let nested_dir = repo_root.join("nested");
+        fs::create_dir_all(&nested_dir).unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&nested_dir).unwrap();
+
+        let config = load_config(None).unwrap();
+
+        std::env::set_current_dir(original_dir).unwrap();
+
+        assert_eq!(
+            config.branches.get("main"),
+            Some(&"root-{version}".to_string())
+        );
+    }
+
+    #[test]
+    #[serial]
+    fn test_load_config_without_repo_falls_back_to_default() {
+        let temp_dir = TempDir::new().unwrap();
+        let no_repo_dir = temp_dir.path().join("no-repo");
+        fs::create_dir_all(&no_repo_dir).unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(&no_repo_dir).unwrap();
+
+        let original_xdg = std::env::var("XDG_CONFIG_HOME").ok();
+        let temp_config_dir = temp_dir.path().join("config");
+        fs::create_dir_all(&temp_config_dir).unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", &temp_config_dir);
+
+        let config = load_config(None).unwrap();
+
+        if let Some(value) = original_xdg {
+            std::env::set_var("XDG_CONFIG_HOME", value);
+        } else {
+            std::env::remove_var("XDG_CONFIG_HOME");
+        }
+        std::env::set_current_dir(original_dir).unwrap();
+
+        assert_eq!(config.branches.get("main"), Some(&"v{version}".to_string()));
     }
 }

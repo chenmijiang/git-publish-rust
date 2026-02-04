@@ -6,7 +6,7 @@
 
 - **核心功能**: 自动 Git 标签发布
 - **技术栈**: Rust 2021, clap (CLI), serde (TOML), git2, regex
-- **最后更新**: 2026 年 1 月 23 日
+- **最后更新**: 2026 年 2 月 4 日
 
 ---
 
@@ -31,7 +31,7 @@
 ```
 user input (args)
     ↓
-config::load_config() ────→ gitpublish.toml / defaults
+config::load_config() ────→ 仓库根目录 gitpublish.toml / 用户配置 / defaults
     ↓
 git_ops::GitRepo::new() ────→ Repository discovery
     ↓
@@ -248,7 +248,7 @@ commits 列表
 ```
 1. --config 指定的路径
    ↓ (如果不存在)
-2. ./gitpublish.toml (当前目录)
+2. 仓库根目录的 gitpublish.toml (git2::Repository::discover)
    ↓ (如果不存在)
 3. ~/.config/.gitpublish.toml (用户配置目录)
    ↓ (如果不存在)
