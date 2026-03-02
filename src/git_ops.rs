@@ -584,13 +584,30 @@ impl GitRepo {
         ) {
             Ok(_) => Ok(()),
             Err(e) => {
-                // Provide more informative error message
-                if e.class() == git2::ErrorClass::Net {
-                    Err(anyhow::anyhow!("Network error during push: {}", e))
-                } else if e.class() == git2::ErrorClass::Reference {
-                    Err(anyhow::anyhow!("Reference error during push: {}", e))
-                } else {
-                    Err(anyhow::anyhow!("Failed to push tag '{}': {}", tag_name, e))
+                // libgit2 has known issues with ODB lookups in some scenarios.
+                // Fall back to git CLI which handles these cases correctly.
+                let output = std::process::Command::new("git")
+                    .args(["push", remote_name, &format!("refs/tags/{}", tag_name)])
+                    .current_dir(self.repo.workdir().unwrap_or(self.repo.path()))
+                    .output();
+
+                match output {
+                    Ok(result) if result.status.success() => Ok(()),
+                    Ok(result) => {
+                        let stderr = String::from_utf8_lossy(&result.stderr);
+                        Err(anyhow::anyhow!(
+                            "Failed to push tag '{}': libgit2: {}; git cli: {}",
+                            tag_name,
+                            e,
+                            stderr.trim()
+                        ))
+                    }
+                    Err(io_err) => Err(anyhow::anyhow!(
+                        "Failed to push tag '{}': libgit2: {}; git cli not available: {}",
+                        tag_name,
+                        e,
+                        io_err
+                    )),
                 }
             }
         }
