@@ -311,7 +311,7 @@ pub fn confirm_tag_use(tag: &str, pattern: &str) -> Result<bool> {
 /// ```
 pub fn confirm_push_tag(tag: &str, remote: &str) -> Result<bool> {
     print!(
-        "\nTag '{}' created locally. Push to remote '{}' (y/N): ",
+        "\nTag '{}' created locally. Push to remote '{}' (Y/n): ",
         tag, remote
     );
     io::stdout().flush()?;
@@ -320,7 +320,7 @@ pub fn confirm_push_tag(tag: &str, remote: &str) -> Result<bool> {
     io::stdin().read_line(&mut input)?;
 
     let response = input.trim().to_lowercase();
-    Ok(response == "y" || response == "yes")
+    Ok(response.is_empty() || response == "y" || response == "yes")
 }
 
 #[cfg(test)]
