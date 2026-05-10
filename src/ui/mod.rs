@@ -252,6 +252,58 @@ pub fn select_or_customize_tag(recommended_tag: &str, _pattern: &str) -> Result<
     }
 }
 
+/// Prompts user to select from candidate tags or enter a custom tag.
+///
+/// The first item is treated as the default recommendation.
+pub fn select_tag_from_candidates(
+    recommended_tag: &str,
+    candidate_tags: &[String],
+) -> Result<String> {
+    if candidate_tags.is_empty() {
+        return Ok(recommended_tag.to_string());
+    }
+
+    println!("\n\x1b[1mSuggested tags:\x1b[0m");
+    for (index, tag) in candidate_tags.iter().enumerate() {
+        if index == 0 {
+            println!("  {}. {} (recommended)", index + 1, tag);
+        } else {
+            println!("  {}. {}", index + 1, tag);
+        }
+    }
+    println!("  c. Custom tag");
+
+    print!(
+        "\nSelect a tag (1-{}, c) [default: 1]: ",
+        candidate_tags.len()
+    );
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let selection = input.trim();
+
+    if selection.is_empty() {
+        return Ok(candidate_tags[0].clone());
+    }
+
+    if selection.eq_ignore_ascii_case("c") {
+        print!("Enter custom tag: ");
+        io::stdout().flush()?;
+
+        let mut custom = String::new();
+        io::stdin().read_line(&mut custom)?;
+        return Ok(custom.trim().to_string());
+    }
+
+    let index = selection.parse::<usize>().unwrap_or(0);
+    if index == 0 || index > candidate_tags.len() {
+        return Err(anyhow::anyhow!("Invalid tag selection"));
+    }
+
+    Ok(candidate_tags[index - 1].clone())
+}
+
 /// Confirms tag use with format validation.
 ///
 /// Validates that the tag matches the configured pattern, then asks for confirmation.
@@ -358,5 +410,16 @@ mod tests {
     fn test_validate_tag_format_invalid_version() {
         let result = validate_tag_format("v1.2.3abc", "v{version}");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_select_tag_from_candidates_empty_defaults_to_recommended() {
+        let selected = select_tag_from_candidates("v1.2.3", &[]).unwrap();
+        assert_eq!(selected, "v1.2.3");
+    }
+
+    #[test]
+    fn test_validate_tag_format_accepts_custom_free_form() {
+        assert!(validate_tag_format("anything", "free-form").is_ok());
     }
 }

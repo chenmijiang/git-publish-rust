@@ -118,6 +118,22 @@ impl Version {
             },
         }
     }
+
+    /// Return ordered candidate versions for the requested bump.
+    pub fn bump_options(&self, bump_type: &VersionBump) -> Vec<Self> {
+        match bump_type {
+            VersionBump::Major => vec![
+                self.bump(&VersionBump::Major),
+                self.bump(&VersionBump::Minor),
+                self.bump(&VersionBump::Patch),
+            ],
+            VersionBump::Minor => vec![
+                self.bump(&VersionBump::Minor),
+                self.bump(&VersionBump::Patch),
+            ],
+            VersionBump::Patch => vec![self.bump(&VersionBump::Patch)],
+        }
+    }
 }
 
 impl fmt::Display for Version {
@@ -252,6 +268,37 @@ mod tests {
         let v = Version::parse("v1.0.0-beta.1").unwrap();
         let bumped = v.bump(&VersionBump::Patch);
         assert_eq!(bumped.prerelease, None);
+    }
+
+    #[test]
+    fn test_version_bump_options_major() {
+        let v = Version::new(0, 1, 0);
+        let options = v.bump_options(&VersionBump::Major);
+
+        assert_eq!(
+            options,
+            vec![
+                Version::new(1, 0, 0),
+                Version::new(0, 2, 0),
+                Version::new(0, 1, 1)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_version_bump_options_minor() {
+        let v = Version::new(0, 1, 0);
+        let options = v.bump_options(&VersionBump::Minor);
+
+        assert_eq!(options, vec![Version::new(0, 2, 0), Version::new(0, 1, 1)]);
+    }
+
+    #[test]
+    fn test_version_bump_options_patch() {
+        let v = Version::new(0, 1, 0);
+        let options = v.bump_options(&VersionBump::Patch);
+
+        assert_eq!(options, vec![Version::new(0, 1, 1)]);
     }
 
     // Display tests

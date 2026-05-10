@@ -254,56 +254,70 @@ fn main() -> Result<()> {
         &config.conventional_commits,
     );
 
-    // Calculate the new version
-    let new_version = match latest_tag.as_ref() {
-        Some(tag) => {
-            match Version::parse(tag) {
-                Ok(current_version) => {
-                    let domain_bump = version_bump;
-                    current_version.bump(&domain_bump)
-                }
-                Err(_) => {
-                    // Unable to parse tag - display warning
-                    let warning = BoundaryWarning::UnparsableTag {
-                        tag: tag.clone(),
-                        reason: "Version number format not recognized".to_string(),
-                    };
-                    ui::display_boundary_warning(&warning);
-
-                    if !args.force
-                        && !args.dry_run
-                        && !ui::confirm_action("Use initial version v0.1.0 and continue?")?
-                    {
-                        println!("Operation cancelled by user.");
-                        return Ok(());
-                    }
-
-                    Version::new(0, 1, 0)
-                }
-            }
-        }
-        None => {
-            // If no tag exists, start with 0.1.0
-            Version::new(0, 1, 0)
-        }
-    };
-
     // Format the new tag using the configured pattern
     let new_tag_pattern = config
         .branches
         .get(&branch_to_tag)
         .cloned()
         .unwrap_or_else(|| "v{version}".to_string());
-    let new_tag = new_tag_pattern.replace("{version}", &new_version.to_string());
+    let final_tag = match latest_tag.as_ref() {
+        Some(tag) => match Version::parse(tag) {
+            Ok(current_version) => {
+                let candidate_tags: Vec<String> = current_version
+                    .bump_options(&version_bump)
+                    .into_iter()
+                    .map(|version| new_tag_pattern.replace("{version}", &version.to_string()))
+                    .collect();
+                let recommended_tag = candidate_tags
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| new_tag_pattern.replace("{version}", "0.1.0"));
 
-    // Display the proposed tag
-    ui::display_proposed_tag(latest_tag.as_deref(), &new_tag);
+                ui::display_proposed_tag(latest_tag.as_deref(), &recommended_tag);
 
-    // Get user's tag selection (use default, customize, or edit)
-    let final_tag = if !args.force && !args.dry_run {
-        ui::select_or_customize_tag(&new_tag, &new_tag_pattern)?
-    } else {
-        new_tag.clone()
+                if !args.force && !args.dry_run {
+                    ui::select_tag_from_candidates(&recommended_tag, &candidate_tags)?
+                } else {
+                    recommended_tag
+                }
+            }
+            Err(_) => {
+                let warning = BoundaryWarning::UnparsableTag {
+                    tag: tag.clone(),
+                    reason: "Version number format not recognized".to_string(),
+                };
+                ui::display_boundary_warning(&warning);
+
+                if !args.force
+                    && !args.dry_run
+                    && !ui::confirm_action("Use initial version v0.1.0 and continue?")?
+                {
+                    println!("Operation cancelled by user.");
+                    return Ok(());
+                }
+
+                let new_version = Version::new(0, 1, 0);
+                let new_tag = new_tag_pattern.replace("{version}", &new_version.to_string());
+                ui::display_proposed_tag(latest_tag.as_deref(), &new_tag);
+
+                if !args.force && !args.dry_run {
+                    ui::select_or_customize_tag(&new_tag, &new_tag_pattern)?
+                } else {
+                    new_tag
+                }
+            }
+        },
+        None => {
+            let new_version = Version::new(0, 1, 0);
+            let new_tag = new_tag_pattern.replace("{version}", &new_version.to_string());
+            ui::display_proposed_tag(latest_tag.as_deref(), &new_tag);
+
+            if !args.force && !args.dry_run {
+                ui::select_or_customize_tag(&new_tag, &new_tag_pattern)?
+            } else {
+                new_tag
+            }
+        }
     };
 
     // Confirm tag use (checks format and gets user confirmation)
